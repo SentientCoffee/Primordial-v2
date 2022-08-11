@@ -1,0 +1,162 @@
+{
+  "folders": [
+    {
+      "name": "Root",
+      "path": "..",
+    },
+    {
+      "name": "Source",
+      "path": "../primordial",
+    },
+    {
+      "name": "Odin Core",
+      "path": "/usr/lib/odin/core"
+    },
+    {
+      "name": "Odin Vendor",
+      "path": "/usr/lib/odin/vendor"
+    }
+  ],
+  "tasks": {
+    "version": "2.0.0",
+    "tasks"  : [
+      {
+        "label"  : "Build debug",
+        "detail" : "Build debug binary with debug symbols",
+        "type"   : "shell",
+        "command": "./build.sh debug",
+        "options": {
+          "cwd": "${workspaceFolder:Root}",
+        },
+        "presentation": {
+          "echo"            : true,
+          "reveal"          : "always",
+          "focus"           : false,
+          "panel"           : "shared",
+          "showReuseMessage": false,
+          "clear"           : true,
+        },
+        "problemMatcher": {
+          "owner"       : "odin",
+          "source"      : "odin",
+          "fileLocation": "absolute",
+          "severity"    : "error",
+          "pattern"     : {
+            "regexp" : "(.*)[(]([0-9]+)[:]([0-9]+)[)](.*)",
+            "file"   : 1,
+            "line"   : 2,
+            "column" : 3,
+            "message": 4,
+          },
+        },
+        "group": {
+          "kind": "build",
+          "isDefault": true,
+        }
+      },
+      {
+        "label"  : "Build debug (vet)",
+        "detail" : "Build vetted debug binary with debug symbols",
+        "type"   : "shell",
+        "command": "./build.sh debug vet",
+        "options": {
+          "cwd": "${workspaceFolder:Root}",
+        },
+        "presentation": {
+          "echo"            : true,
+          "reveal"          : "always",
+          "focus"           : false,
+          "panel"           : "shared",
+          "showReuseMessage": false,
+          "clear"           : true,
+        },
+        "problemMatcher": {
+          "owner"       : "odin",
+          "source"      : "odin",
+          "fileLocation": "absolute",
+          "severity"    : "error",
+          "pattern"     : {
+            "regexp" : "(.*)[(]([0-9]+)[:]([0-9]+)[)](.*)",
+            "file"   : 1,
+            "line"   : 2,
+            "column" : 3,
+            "message": 4,
+          },
+        },
+        "group": {
+          "kind"     : "build",
+          "isDefault": false,
+        }
+      },
+      {
+        "label"  : "Build release",
+        "detail" : "Build release binary",
+        "type"   : "shell",
+        "command": "./build.sh vet",
+        "options": {
+          "cwd": "${workspaceFolder:Root}"
+        },
+        "presentation": {
+          "echo"            : true,
+          "reveal"          : "always",
+          "focus"           : false,
+          "panel"           : "shared",
+          "showReuseMessage": false,
+          "clear"           : true,
+        },
+        "problemMatcher": {
+          "owner"       : "odin",
+          "source"      : "odin",
+          "fileLocation": "absolute",
+          "severity"    : "error",
+          "pattern"     : {
+            "regexp" : "(.*)[(]([0-9]+)[:]([0-9]+)[)](.*)",
+            "file"   : 1,
+            "line"   : 2,
+            "column" : 3,
+            "message": 4,
+          },
+        },
+        "group": {
+          "kind"     : "build",
+          "isDefault": false,
+        }
+      }
+    ]
+  },
+  "launch": {
+    "version"       : "0.2.0",
+    "configurations": [
+      {
+        "name"                  : "Build and debug (CodeLLDB)",
+        "type"                  : "lldb",
+        "request"               : "launch",
+        "program"               : "${workspaceFolder:Root}/build/debug/primordial_d",
+        "cwd"                   : "${workspaceFolder:Root}",
+        "preLaunchTask"         : "Build debug",
+        "terminal"              : "integrated",
+        "internalConsoleOptions": "neverOpen",
+        "stopOnEntry"           : false,
+      },
+      {
+        "name"                  : "Build and debug (C/C++ GDB)",
+        "type"                  : "cppdbg",
+        "request"               : "launch",
+        "program"               : "${workspaceFolder:Root}/build/debug/primordial_d",
+        "cwd"                   : "${workspaceFolder:Root}",
+        "preLaunchTask"         : "Build debug",
+        "internalConsoleOptions": "neverOpen",
+        "externalConsole"       : false,
+        "stopAtEntry"           : false,
+        "MIMode"                : "gdb",
+        "miDebuggerPath"        : "/usr/bin/gdb"
+      }
+    ]
+  },
+  "settings": {
+    "debug.allowBreakpointsEverywhere": true,
+    "todo-tree.filtering.excludeGlobs": [
+      "/usr/lib/odin/**"
+    ]
+  },
+}

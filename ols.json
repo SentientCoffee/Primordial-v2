@@ -1,0 +1,25 @@
+{
+  "collections": [
+    {
+      "name": "core",
+      "path": "/usr/lib/odin/core"
+    },
+    {
+      "name": "vendor",
+      "path": "/usr/lib/odin/vendor"
+    },
+    {
+      "name": "engine",
+      "path": "engine"
+    },
+    {
+      "name": "game",
+      "path": "game"
+    }
+  ],
+
+  "enable_document_symbols": true,
+  "enable_semantic_tokens" : true,
+  "enable_hover"           : true,
+  "enable_snippets"        : true
+}
