@@ -22,10 +22,10 @@ g_validation_layers := [?]cstring {
 g_context : runtime.Context
 
 main :: proc() {
-    // @Note(Daniel):  Setup context
+    // @Note(Daniel): Setup context
     g_context = context
 
-    // @Note(Daniel):  Init window
+    // @Note(Daniel): Init window
     glfw.Init()
     defer glfw.Terminate()
 
@@ -35,11 +35,11 @@ main :: proc() {
     window := glfw.CreateWindow(WIDTH, HEIGHT, "Vulkan", nil, nil)
     defer glfw.DestroyWindow(window);
 
-    // @Note(Daniel):  Load Vulkan global procs
+    // @Note(Daniel): Load Vulkan global procs
     // @Reference: https://gist.github.com/terickson001/bdaa52ce621a6c7f4120abba8959ffe6#file-main-odin-L216
     vk.load_proc_addresses_global(cast(rawptr) glfw.GetInstanceProcAddress);
 
-    // @Note(Daniel):  Query available extensions
+    // @Note(Daniel): Query available extensions
     available_extension_count : u32
     vk.EnumerateInstanceExtensionProperties(nil, &available_extension_count, nil)
     available_extensions := make([]vk.ExtensionProperties, available_extension_count)
@@ -74,7 +74,7 @@ main :: proc() {
         append(&required_extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
     }
 
-    // @Note(Daniel):  Query available validation layers
+    // @Note(Daniel): Query available validation layers
     when ENABLE_VALIDATION {
         available_layer_count : u32
         vk.EnumerateInstanceLayerProperties(&available_layer_count, nil)
@@ -98,7 +98,7 @@ main :: proc() {
         }
     }
 
-    // @Note(Daniel):  Create Vulkan instance
+    // @Note(Daniel): Create Vulkan instance
     when ENABLE_VALIDATION {
         instance_debug_messenger_create_info := create_debug_messenger_create_info()
     }
@@ -130,7 +130,7 @@ main :: proc() {
     defer vk.DestroyInstance(instance, nil)
     vk.load_proc_addresses_instance(instance)
 
-    // @Note(Daniel):  Create debug messenger
+    // @Note(Daniel): Create debug messenger
     when ENABLE_VALIDATION {
         debug_messenger : vk.DebugUtilsMessengerEXT
         debug_messenger_create_info := create_debug_messenger_create_info()
@@ -140,7 +140,7 @@ main :: proc() {
         vk.DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
     }
 
-    // @Note(Daniel):  Select physical device
+    // @Note(Daniel): Get physical device candidates
     available_physical_device_count : u32
     vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, nil)
     if available_physical_device_count == 0 {
@@ -155,34 +155,19 @@ main :: proc() {
     for device in available_physical_devices {
         // device_props    : vk.PhysicalDeviceProperties
         // device_features : vk.PhysicalDeviceFeatures
-
-        vk.GetPhysicalDeviceProperties(device, &device_props)
-        vk.GetPhysicalDeviceFeatures(device, &device_features)
-
-        // @Note(Daniel): Find queue families
-        available_queue_family_count : u32
-        vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, nil)
-        available_queue_families := make([]vk.QueueFamilyProperties, available_queue_family_count)
-        defer delete(available_queue_families)
-        vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, raw_data(available_queue_families))
-
-        Queue_Families :: struct { graphics : Maybe(u32) }
-        queue_families : Queue_Families
-        for queue_family, index in available_queue_families {
-            if !(queue_family.queueFlags & { .GRAPHICS }) { continue }
-
-            queue_families.graphics = index
-            break
-        }
-
-        score : int
-        if queue_families.graphics != nil {
-            score += 10
-        }
+        // vk.GetPhysicalDeviceProperties(device, &device_props)
+        // vk.GetPhysicalDeviceFeatures(device, &device_features)
 
         // if device_props.deviceType == .DISCRETE_GPU { score += 1000 }
         // score += cast(int) device_props.limits.maxImageDimension2D
         // if !device_features.geometryShader { score = 0 }
+
+        // @Note(Daniel): Find queue families
+        queue_families := find_queue_families(device)
+        score : int
+        if queue_families.graphics != nil {
+            score += 10
+        }
 
         append(&device_candidates, Device_Candidate { device = device, score = score })
     }
@@ -192,6 +177,7 @@ main :: proc() {
         less = proc(i, j : Device_Candidate) -> bool { return i.score > j.score },
     )
 
+    // @Note(Daniel): Select physical device to use
     physical_device : vk.PhysicalDevice
     if device_candidates[0].score > 0 {
         physical_device = device_candidates[0].device
@@ -205,13 +191,70 @@ main :: proc() {
         os.exit(1)
     }
 
-    // @Note(Daniel):  Main loop
+    // @Note(Daniel): Create queues
+    queue_families := find_queue_families(physical_device)
+    queue_priorities := [?]f32 { 1.0 }
+    queue_create_info := vk.DeviceQueueCreateInfo {
+        sType            = .DEVICE_QUEUE_CREATE_INFO,
+        queueFamilyIndex = queue_families.graphics.?,
+        pQueuePriorities = raw_data(queue_priorities[:]),
+        queueCount       = 1,
+    }
+
+    // @Note(Daniel): Get device features to use
+    physical_device_features : vk.PhysicalDeviceFeatures
+
+    // @Note(Daniel): Create logical device
+    logical_device_create_info := vk.DeviceCreateInfo {
+        sType                 = .DEVICE_CREATE_INFO,
+        pQueueCreateInfos     = &queue_create_info,
+        queueCreateInfoCount  = 1,
+        pEnabledFeatures      = &physical_device_features,
+
+        // @Note(Daniel): Not necessary anymore, but for compatibility with older Vulkan implementations we set these anyway
+        enabledExtensionCount = 0,
+        enabledLayerCount     = cast(u32) len(g_validation_layers) when ENABLE_VALIDATION else 0,
+        ppEnabledLayerNames   = raw_data(g_validation_layers[:])   when ENABLE_VALIDATION else nil,
+    }
+
+    logical_device : vk.Device
+    if res := vk.CreateDevice(physical_device, &logical_device_create_info, nil, &logical_device); res != .SUCCESS {
+        fmt.printf("Failed to create logical device! Error: {}\n", res)
+        os.exit(1)
+    }
+    defer vk.DestroyDevice(logical_device, nil)
+
+    // @Note(Daniel): Retrieve queue handles
+    graphics_queue : vk.Queue
+    vk.GetDeviceQueue(logical_device, queue_families.graphics.?, 0, &graphics_queue)
+
+    // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents();
     }
 }
 
+Queue_Families :: struct {
+    graphics : Maybe(u32),
+}
+
 create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
+    debug_callback :: proc "system" (
+        message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
+        message_type_flags : vk.DebugUtilsMessageTypeFlagsEXT,
+        callback_data      : ^vk.DebugUtilsMessengerCallbackDataEXT,
+        user_data          : rawptr,
+    ) -> b32 {
+        context = g_context
+        fmt.printf(
+            "Validation layer{1}: {0}\n",
+            callback_data.pMessage,
+            " warning" if message_severity >= { .WARNING } else
+            " error"   if message_severity >= { .ERROR   } else "",
+        )
+        return false
+    }
+
     return {
         sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         messageSeverity = { .VERBOSE, .WARNING, .ERROR },
@@ -221,18 +264,19 @@ create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfo
     }
 }
 
-debug_callback :: proc "system" (
-    message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
-    message_type_flags : vk.DebugUtilsMessageTypeFlagsEXT,
-    callback_data      : ^vk.DebugUtilsMessengerCallbackDataEXT,
-    user_data          : rawptr,
-) -> b32 {
-    context = g_context
-    fmt.printf(
-        "Validation layer{1}: {0}\n",
-        callback_data.pMessage,
-        " warning" if message_severity >= { .WARNING } else
-        " error"   if message_severity >= { .ERROR   } else "",
-    )
-    return false
+find_queue_families :: proc(device : vk.PhysicalDevice) -> (queue_families : Queue_Families) {
+    available_queue_family_count : u32
+    vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, nil)
+    available_queue_families := make([]vk.QueueFamilyProperties, available_queue_family_count)
+    defer delete(available_queue_families)
+    vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, raw_data(available_queue_families))
+
+    for queue_family, index in available_queue_families {
+        if vk.QueueFlag.GRAPHICS not_in queue_family.queueFlags { continue }
+
+        queue_families.graphics = cast(u32) index
+        break
+    }
+
+    return
 }
