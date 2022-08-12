@@ -15,10 +15,6 @@ HEIGHT :: 600
 when ODIN_DEBUG { ENABLE_VALIDATION :: true  }
 else            { ENABLE_VALIDATION :: false }
 
-g_validation_layers := [?]cstring {
-    "VK_LAYER_KHRONOS_validation",
-}
-
 g_context : runtime.Context
 
 main :: proc() {
@@ -37,7 +33,7 @@ main :: proc() {
 
     // @Note(Daniel): Load Vulkan global procs
     // @Reference: https://gist.github.com/terickson001/bdaa52ce621a6c7f4120abba8959ffe6#file-main-odin-L216
-    vk.load_proc_addresses_global(cast(rawptr) glfw.GetInstanceProcAddress);
+    vk.load_proc_addresses_global(cast(rawptr) glfw.GetInstanceProcAddress)
 
     // @Note(Daniel): Get required extensions
     available_extension_count : u32
@@ -67,15 +63,20 @@ main :: proc() {
         append(&required_extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
     }
 
-    // @Note(Daniel): Query available validation layers
+    // @Note(Daniel): Get validation layers
     when ENABLE_VALIDATION {
+        validation_layers := []cstring {
+            "VK_LAYER_KHRONOS_validation",
+        }
+
         available_layer_count : u32
         vk.EnumerateInstanceLayerProperties(&available_layer_count, nil)
         available_layers := make([]vk.LayerProperties, available_layer_count)
         vk.EnumerateInstanceLayerProperties(&available_layer_count, raw_data(available_layers))
 
-        for needed_layer in g_validation_layers {
+        for needed_layer in validation_layers {
             layer_found := false
+
             for layer_props in &available_layers {
                 layer_name := strings.trim_null(string(layer_props.layerName[:]))
                 if string(needed_layer) == layer_name {
@@ -110,8 +111,8 @@ main :: proc() {
         pApplicationInfo        = &app_info,
         enabledExtensionCount   = auto_cast len(required_extensions),
         ppEnabledExtensionNames = raw_data(required_extensions),
-        enabledLayerCount       = auto_cast len(g_validation_layers)    when ENABLE_VALIDATION else 0,
-        ppEnabledLayerNames     = raw_data(g_validation_layers[:])      when ENABLE_VALIDATION else nil,
+        enabledLayerCount       = auto_cast len(validation_layers)      when ENABLE_VALIDATION else 0,
+        ppEnabledLayerNames     = raw_data(validation_layers)           when ENABLE_VALIDATION else nil,
         pNext                   = &instance_debug_messenger_create_info when ENABLE_VALIDATION else nil,
     }
 
@@ -192,7 +193,10 @@ main :: proc() {
 
     // @Note(Daniel): Create queues
     queue_family_indices  := find_queue_families(physical_device, window_surface)
-    unique_queue_families := [?]u32 { queue_family_indices.graphics.?, queue_family_indices.presentation.? }
+    unique_queue_families := [?]u32 {
+        queue_family_indices.graphics.?,
+        queue_family_indices.presentation.?,
+    }
 
     queue_create_infos : [len(unique_queue_families)]vk.DeviceQueueCreateInfo
     queue_priority : f32 = 1.0
@@ -218,8 +222,8 @@ main :: proc() {
 
         // @Note(Daniel): Not necessary anymore, but for compatibility with older Vulkan implementations we set these anyway
         enabledExtensionCount = 0,
-        enabledLayerCount     = auto_cast len(g_validation_layers) when ENABLE_VALIDATION else 0,
-        ppEnabledLayerNames   = raw_data(g_validation_layers[:])   when ENABLE_VALIDATION else nil,
+        enabledLayerCount       = auto_cast len(validation_layers) when ENABLE_VALIDATION else 0,
+        ppEnabledLayerNames     = raw_data(validation_layers)      when ENABLE_VALIDATION else nil,
     }
 
     logical_device : vk.Device
@@ -240,7 +244,7 @@ main :: proc() {
     }
 }
 
-Queue_Families :: struct {
+Queue_Family_Indices :: struct {
     graphics,
     presentation : Maybe(u32),
 }
@@ -253,6 +257,9 @@ create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfo
         user_data          : rawptr,
     ) -> b32 {
         context = g_context
+
+        if callback_data.messageIdNumber == 0xde3cbaf { return false }
+
         fmt.printf(
             "Validation layer{1}: {0}\n",
             callback_data.pMessage,
@@ -271,7 +278,7 @@ create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfo
     }
 }
 
-find_queue_families :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR) -> (queue_family_indices : Queue_Families) {
+find_queue_families :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR) -> (queue_family_indices : Queue_Family_Indices) {
     available_queue_family_count : u32
     vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, nil)
     available_queue_families := make([]vk.QueueFamilyProperties, available_queue_family_count)
