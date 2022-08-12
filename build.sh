@@ -26,12 +26,7 @@ echo -n "Building ${BUILD_LABEL} binary"
 [ -n "${VET_FLAG}" ] && echo -n " (vetted)"
 echo -e "...\n=========="
 
-odin build primordial\
-   -out:${BUILD_DIR}/${EXE_NAME}\
-   -o:${BUILD_LEVEL}\
-   ${DEBUG_FLAG}\
-   ${VET_FLAG}\
-   -microarch:native\
-   -show-timings
+odin build primordial -out:${BUILD_DIR}/${EXE_NAME} -o:${BUILD_LEVEL} ${DEBUG_FLAG} ${VET_FLAG} -microarch:native -show-timings ||
+   (echo -e "==========\nFailed!" && exit 1)
 
 echo -e "==========\nDone."
