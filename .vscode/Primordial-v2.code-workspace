@@ -158,6 +158,13 @@
   },
   "settings": {
     "debug.allowBreakpointsEverywhere": true,
+
+    "alignment.surroundSpace": {
+      "colon"     : [ 1, 1 ],
+      "assignment": [ 1, 1 ],
+      "arrow"     : [ 1, 1 ],
+      "comment"   : 2,
+    },
     "todo-tree.filtering.excludeGlobs": [
       "/usr/lib/odin/**"
     ]
