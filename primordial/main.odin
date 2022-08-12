@@ -3,6 +3,7 @@ package primordial
 import "core:fmt"
 import "core:os"
 import "core:runtime"
+import "core:slice"
 import "core:strings"
 
 import "vendor:glfw"
@@ -21,6 +22,9 @@ g_validation_layers := [?]cstring {
 g_context : runtime.Context
 
 main :: proc() {
+    // @Note(Daniel):  Setup context
+    g_context = context
+
     // @Note(Daniel):  Init window
     glfw.Init()
     defer glfw.Terminate()
@@ -88,7 +92,7 @@ main :: proc() {
             }
 
             if !layer_found {
-                fmt.printf("Requested validation layer \"{}\" not in available layers!")
+                fmt.printf("Requested validation layer \"{}\" not in available layers!\n")
                 os.exit(1)
             }
         }
@@ -126,9 +130,6 @@ main :: proc() {
     defer vk.DestroyInstance(instance, nil)
     vk.load_proc_addresses_instance(instance)
 
-    context.user_ptr = &instance
-    g_context = context
-
     // @Note(Daniel):  Create debug messenger
     when ENABLE_VALIDATION {
         debug_messenger : vk.DebugUtilsMessengerEXT
@@ -137,6 +138,71 @@ main :: proc() {
     }
     defer when ENABLE_VALIDATION {
         vk.DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
+    }
+
+    // @Note(Daniel):  Select physical device
+    available_physical_device_count : u32
+    vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, nil)
+    if available_physical_device_count == 0 {
+        fmt.printf("No physical device with Vulkan support found!\n")
+        os.exit(1)
+    }
+    available_physical_devices := make([]vk.PhysicalDevice, available_physical_device_count)
+    vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, raw_data(available_physical_devices))
+
+    Device_Candidate :: struct { device : vk.PhysicalDevice, score : int }
+    device_candidates : [dynamic]Device_Candidate
+    for device in available_physical_devices {
+        // device_props    : vk.PhysicalDeviceProperties
+        // device_features : vk.PhysicalDeviceFeatures
+
+        vk.GetPhysicalDeviceProperties(device, &device_props)
+        vk.GetPhysicalDeviceFeatures(device, &device_features)
+
+        // @Note(Daniel): Find queue families
+        available_queue_family_count : u32
+        vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, nil)
+        available_queue_families := make([]vk.QueueFamilyProperties, available_queue_family_count)
+        defer delete(available_queue_families)
+        vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, raw_data(available_queue_families))
+
+        Queue_Families :: struct { graphics : Maybe(u32) }
+        queue_families : Queue_Families
+        for queue_family, index in available_queue_families {
+            if !(queue_family.queueFlags & { .GRAPHICS }) { continue }
+
+            queue_families.graphics = index
+            break
+        }
+
+        score : int
+        if queue_families.graphics != nil {
+            score += 10
+        }
+
+        // if device_props.deviceType == .DISCRETE_GPU { score += 1000 }
+        // score += cast(int) device_props.limits.maxImageDimension2D
+        // if !device_features.geometryShader { score = 0 }
+
+        append(&device_candidates, Device_Candidate { device = device, score = score })
+    }
+
+    slice.sort_by(
+        data = device_candidates[:],
+        less = proc(i, j : Device_Candidate) -> bool { return i.score > j.score },
+    )
+
+    physical_device : vk.PhysicalDevice
+    if device_candidates[0].score > 0 {
+        physical_device = device_candidates[0].device
+        device_props : vk.PhysicalDeviceProperties
+        vk.GetPhysicalDeviceProperties(physical_device, &device_props)
+        device_name := strings.trim_null(string(device_props.deviceName[:]))
+        fmt.printf("Physical device chosen: {} ({})\n", device_name, device_props.deviceID)
+    }
+    else {
+        fmt.printf("Failed to find a suitable GPU!\n")
+        os.exit(1)
     }
 
     // @Note(Daniel):  Main loop
@@ -151,7 +217,7 @@ create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfo
         messageSeverity = { .VERBOSE, .WARNING, .ERROR },
         messageType     = { .GENERAL, .VALIDATION, .PERFORMANCE },
         pfnUserCallback = debug_callback,
-        pUserData       = &g_context,
+        pUserData       = nil,
     }
 }
 
@@ -161,7 +227,7 @@ debug_callback :: proc "system" (
     callback_data      : ^vk.DebugUtilsMessengerCallbackDataEXT,
     user_data          : rawptr,
 ) -> b32 {
-    context = (cast(^runtime.Context) user_data)^
+    context = g_context
     fmt.printf(
         "Validation layer{1}: {0}\n",
         callback_data.pMessage,
