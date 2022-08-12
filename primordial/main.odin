@@ -54,7 +54,29 @@ console_logger_proc :: proc(data : rawptr, level : log.Level, text : string, opt
     }
 }
 
-main :: proc() {
+when ODIN_DEBUG {
+    import "core:mem"
+
+    main :: proc() {
+        track: mem.Tracking_Allocator
+        mem.tracking_allocator_init(&track, context.allocator)
+        context.allocator = mem.tracking_allocator(&track)
+
+        _main()
+
+        for _, leak in track.allocation_map {
+            fmt.printf("[{}:{}:{}] Leaked {} bytes\n", leak.location.file_path, leak.location.line, leak.location.column, leak.size)
+        }
+        for bad_free in track.bad_free_array {
+            fmt.printf("[{}:{}:{}] Allocation {:p} was freed badly\n", bad_free.location.file_path, bad_free.location.line, bad_free.location.column, bad_free.memory)
+        }
+    }
+}
+else {
+    main :: proc() { _main() }
+}
+
+_main :: proc() {
     // @Note(Daniel): Setup context
     context.logger = log.Logger {
         data         = nil,
