@@ -1,6 +1,8 @@
 package primordial
 
+import "core:intrinsics"
 import "core:fmt"
+import "core:log"
 import "core:os"
 import "core:runtime"
 import "core:slice"
@@ -17,8 +19,49 @@ else            { ENABLE_VALIDATION :: false }
 
 g_context : runtime.Context
 
+console_logger_proc :: proc(data : rawptr, level : log.Level, text : string, options : log.Options, location := #caller_location) {
+    WHITE  :: "\x1b[0m"
+    CYAN   :: "\x1b[36m"
+    GREEN  :: "\x1b[92m"
+    YELLOW :: "\x1b[93m"
+    RED    :: "\x1b[91m"
+
+    // @Note(Daniel): Not using data parameter
+
+    col := WHITE
+    if .Level in options {
+        if .Terminal_Color in options {
+            switch level {
+                case .Debug:   col = CYAN
+                case .Info:    col = GREEN
+                case .Warning: col = YELLOW
+                case .Error:   fallthrough
+                case .Fatal:   col = RED
+            }
+        }
+    }
+
+    format_str := fmt.tprintf("{}[{: 7s}] {{}} {}{}", col, level, text, WHITE)
+    if level == .Fatal {
+        loc_str := fmt.tprintf("[{}:{}:{}]", location.file_path, location.line, location.column)
+        fmt.printf(format_str, loc_str)
+        when ODIN_DEBUG { intrinsics.debug_trap() }
+        else { os.exit(1) }
+    }
+    else {
+        loc_str := fmt.tprintf("[{: 15s}:{}:{}]", location.procedure, location.line, location.column)
+        fmt.printf(format_str, loc_str)
+    }
+}
+
 main :: proc() {
     // @Note(Daniel): Setup context
+    context.logger = log.Logger {
+        data         = nil,
+        procedure    = console_logger_proc,
+        options      = { .Level, .Terminal_Color },
+        lowest_level = .Debug when ODIN_DEBUG else .Warning,
+    }
     g_context = context
 
     // @Note(Daniel): Init window
@@ -53,8 +96,7 @@ main :: proc() {
     }
 
     if available_glfw_extension_count != len(glfw_required_extensions) {
-        fmt.println("Not all required GLFW extensions are available!")
-        os.exit(1)
+        log.panic("Not all required GLFW extensions are available!")
     }
 
     required_extensions : [dynamic]cstring
@@ -86,8 +128,7 @@ main :: proc() {
             }
 
             if !layer_found {
-                fmt.printf("Requested validation layer \"{}\" not in available layers!\n", needed_layer)
-                os.exit(1)
+                log.panicf("Requested validation layer \"{}\" not in available layers!\n", needed_layer)
             }
         }
     }
@@ -118,8 +159,7 @@ main :: proc() {
 
     instance : vk.Instance
     if res := vk.CreateInstance(&instance_create_info, nil, &instance); res != .SUCCESS {
-        fmt.printf("Failed to create Vulkan instance! Error: {}\n", res)
-        os.exit(1)
+        log.panicf("Failed to create Vulkan instance! Error: {}\n", res)
     }
     defer vk.DestroyInstance(instance, nil)
     vk.load_proc_addresses_instance(instance)
@@ -137,8 +177,7 @@ main :: proc() {
     // @Note(Daniel): Create window surface
     window_surface : vk.SurfaceKHR
     if res := glfw.CreateWindowSurface(instance, window, nil, &window_surface); res != .SUCCESS {
-        fmt.printf("Failed to create window surface! Error: {}\n", res)
-        os.exit(1)
+        log.panicf("Failed to create window surface! Error: {}\n", res)
     }
     defer vk.DestroySurfaceKHR(instance, window_surface, nil)
 
@@ -146,8 +185,7 @@ main :: proc() {
     available_physical_device_count : u32
     vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, nil)
     if available_physical_device_count == 0 {
-        fmt.printf("No physical device with Vulkan support found!\n")
-        os.exit(1)
+        log.panicf("No physical device with Vulkan support found!\n")
     }
     available_physical_devices := make([]vk.PhysicalDevice, available_physical_device_count)
     vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, raw_data(available_physical_devices))
@@ -216,8 +254,7 @@ main :: proc() {
         physical_device = device_candidates[0].device
     }
     else {
-        fmt.printf("Failed to find a suitable GPU!\n")
-        os.exit(1)
+        log.panicf("Failed to find a suitable GPU!\n")
     }
 
     {
@@ -231,13 +268,13 @@ main :: proc() {
         defer delete(available_device_extensions)
         vk.EnumerateDeviceExtensionProperties(physical_device, nil, &available_device_extension_count, raw_data(available_device_extensions))
 
-        fmt.printf("Physical device chosen: {} ({})\n", device_name, device_props.deviceID)
-        fmt.println("Specified required extensions available:")
+        log.infof("Physical device chosen: {} ({})\n", device_name, device_props.deviceID)
+        log.debug("Specified required extensions available:\n")
         for ext in &available_device_extensions {
             ext_name := strings.trim_null(string(ext.extensionName[:]))
             for needed_ext in required_device_extensions {
                 if string(needed_ext) == ext_name {
-                    fmt.printf("    {}\n", ext_name)
+                    log.debugf("    {}\n", ext_name)
                 }
             }
         }
@@ -281,8 +318,7 @@ main :: proc() {
 
     logical_device : vk.Device
     if res := vk.CreateDevice(physical_device, &logical_device_create_info, nil, &logical_device); res != .SUCCESS {
-        fmt.printf("Failed to create logical device! Error: {}\n", res)
-        os.exit(1)
+        log.panicf("Failed to create logical device! Error: {}\n", res)
     }
     defer vk.DestroyDevice(logical_device, nil)
 
@@ -353,8 +389,7 @@ main :: proc() {
 
     swapchain : vk.SwapchainKHR
     if res := vk.CreateSwapchainKHR(logical_device, &swapchain_create_info, nil, &swapchain); res != .SUCCESS {
-        fmt.printf("Failed to create swapchain! Error: {}\n", res)
-        os.exit(1)
+        log.panicf("Failed to create swapchain! Error: {}\n", res)
     }
     defer vk.DestroySwapchainKHR(logical_device, swapchain, nil)
 
@@ -388,15 +423,16 @@ create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfo
         user_data          : rawptr,
     ) -> b32 {
         context = g_context
-
         if callback_data.messageIdNumber == 0xde3cbaf { return false }
 
-        fmt.printf(
-            "Validation layer{1}: {0}\n",
-            callback_data.pMessage,
-            " warning" if message_severity >= { .WARNING } else
-            " error"   if message_severity >= { .ERROR   } else "",
-        )
+        format_str := fmt.tprintf("Validation{{}}: {}\n", callback_data.pMessage)
+
+        switch {
+            case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
+            case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
+            case:                                  log.debugf(format_str, "")
+        }
+
         return false
     }
 
