@@ -39,33 +39,26 @@ main :: proc() {
     // @Reference: https://gist.github.com/terickson001/bdaa52ce621a6c7f4120abba8959ffe6#file-main-odin-L216
     vk.load_proc_addresses_global(cast(rawptr) glfw.GetInstanceProcAddress);
 
-    // @Note(Daniel): Query available extensions
+    // @Note(Daniel): Get required extensions
     available_extension_count : u32
     vk.EnumerateInstanceExtensionProperties(nil, &available_extension_count, nil)
     available_extensions := make([]vk.ExtensionProperties, available_extension_count)
     vk.EnumerateInstanceExtensionProperties(nil, &available_extension_count, raw_data(available_extensions))
 
-    glfw_required_extensions := glfw.GetRequiredInstanceExtensions()
-    fmt.printf("Available extensions:\n")
-    glfw_available_extension_count := 0
+    glfw_required_extensions       := glfw.GetRequiredInstanceExtensions()
+    available_glfw_extension_count := 0
     for ext in &available_extensions {
         ext_name := strings.trim_null(string(ext.extensionName[:]))
-        fmt.printf("    {}", ext_name)
         for glfw_ext in glfw_required_extensions {
             if string(glfw_ext) != ext_name { continue }
-            glfw_available_extension_count += 1
-            fmt.printf(" -- Required by GLFW")
+            available_glfw_extension_count += 1
             break
         }
-        fmt.println()
     }
 
-    if glfw_available_extension_count != len(glfw_required_extensions) {
+    if available_glfw_extension_count != len(glfw_required_extensions) {
         fmt.println("Not all required GLFW extensions are available!")
         os.exit(1)
-    }
-    else {
-        fmt.println("All required GLFW extensions available.")
     }
 
     required_extensions : [dynamic]cstring
@@ -92,7 +85,7 @@ main :: proc() {
             }
 
             if !layer_found {
-                fmt.printf("Requested validation layer \"{}\" not in available layers!\n")
+                fmt.printf("Requested validation layer \"{}\" not in available layers!\n", needed_layer)
                 os.exit(1)
             }
         }
