@@ -324,9 +324,9 @@ main :: proc() {
         }
     }
 
-    swapchain_image_count := swapchain_available.capabilities.minImageCount + 1
-    if swapchain_available.capabilities.maxImageCount > 0 && swapchain_image_count > swapchain_available.capabilities.maxImageCount {
-        swapchain_image_count = swapchain_available.capabilities.maxImageCount
+    swapchain_min_image_count := swapchain_available.capabilities.minImageCount + 1
+    if swapchain_available.capabilities.maxImageCount > 0 && swapchain_min_image_count > swapchain_available.capabilities.maxImageCount {
+        swapchain_min_image_count = swapchain_available.capabilities.maxImageCount
     }
 
     shared_queue_family_indices := (queue_family_indices.graphics.? == queue_family_indices.presentation.?)
@@ -337,7 +337,7 @@ main :: proc() {
         imageColorSpace       = swapchain_surface_format.colorSpace,
         presentMode           = swapchain_present_mode,
         imageExtent           = swapchain_extents,
-        minImageCount         = swapchain_image_count,
+        minImageCount         = swapchain_min_image_count,
 
         imageArrayLayers      = 1,
         preTransform          = swapchain_available.capabilities.currentTransform,
