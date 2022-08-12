@@ -108,9 +108,9 @@ main :: proc() {
     instance_create_info := vk.InstanceCreateInfo {
         sType                   = .INSTANCE_CREATE_INFO,
         pApplicationInfo        = &app_info,
-        enabledExtensionCount   = cast(u32) len(required_extensions),
+        enabledExtensionCount   = auto_cast len(required_extensions),
         ppEnabledExtensionNames = raw_data(required_extensions),
-        enabledLayerCount       = cast(u32) len(g_validation_layers)    when ENABLE_VALIDATION else 0,
+        enabledLayerCount       = auto_cast len(g_validation_layers)    when ENABLE_VALIDATION else 0,
         ppEnabledLayerNames     = raw_data(g_validation_layers[:])      when ENABLE_VALIDATION else nil,
         pNext                   = &instance_debug_messenger_create_info when ENABLE_VALIDATION else nil,
     }
@@ -132,6 +132,14 @@ main :: proc() {
     defer when ENABLE_VALIDATION {
         vk.DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
     }
+
+    // @Note(Daniel): Create window surface
+    window_surface : vk.SurfaceKHR
+    if res := glfw.CreateWindowSurface(instance, window, nil, &window_surface); res != .SUCCESS {
+        fmt.printf("Failed to create window surface! Error: {}\n", res)
+        os.exit(1)
+    }
+    defer vk.DestroySurfaceKHR(instance, window_surface, nil)
 
     // @Note(Daniel): Get physical device candidates
     available_physical_device_count : u32
@@ -155,12 +163,10 @@ main :: proc() {
         // score += cast(int) device_props.limits.maxImageDimension2D
         // if !device_features.geometryShader { score = 0 }
 
-        // @Note(Daniel): Find queue families
-        queue_families := find_queue_families(device)
+        queue_family_indices := find_queue_families(device, window_surface)
         score : int
-        if queue_families.graphics != nil {
-            score += 10
-        }
+        if queue_family_indices.graphics     != nil { score += 1 }
+        if queue_family_indices.presentation != nil { score += 1 }
 
         append(&device_candidates, Device_Candidate { device = device, score = score })
     }
@@ -185,13 +191,19 @@ main :: proc() {
     }
 
     // @Note(Daniel): Create queues
-    queue_families := find_queue_families(physical_device)
-    queue_priorities := [?]f32 { 1.0 }
-    queue_create_info := vk.DeviceQueueCreateInfo {
-        sType            = .DEVICE_QUEUE_CREATE_INFO,
-        queueFamilyIndex = queue_families.graphics.?,
-        pQueuePriorities = raw_data(queue_priorities[:]),
-        queueCount       = 1,
+    queue_family_indices  := find_queue_families(physical_device, window_surface)
+    unique_queue_families := [?]u32 { queue_family_indices.graphics.?, queue_family_indices.presentation.? }
+
+    queue_create_infos : [len(unique_queue_families)]vk.DeviceQueueCreateInfo
+    queue_priority : f32 = 1.0
+    for queue_family_index, i in unique_queue_families {
+        create_info := vk.DeviceQueueCreateInfo {
+            sType            = .DEVICE_QUEUE_CREATE_INFO,
+            queueFamilyIndex = queue_family_index,
+            pQueuePriorities = &queue_priority,
+            queueCount       = 1,
+        }
+        queue_create_infos[i] = create_info
     }
 
     // @Note(Daniel): Get device features to use
@@ -200,13 +212,13 @@ main :: proc() {
     // @Note(Daniel): Create logical device
     logical_device_create_info := vk.DeviceCreateInfo {
         sType                 = .DEVICE_CREATE_INFO,
-        pQueueCreateInfos     = &queue_create_info,
-        queueCreateInfoCount  = 1,
+        queueCreateInfoCount  = auto_cast len(queue_create_infos),
+        pQueueCreateInfos     = raw_data(queue_create_infos[:]),
         pEnabledFeatures      = &physical_device_features,
 
         // @Note(Daniel): Not necessary anymore, but for compatibility with older Vulkan implementations we set these anyway
         enabledExtensionCount = 0,
-        enabledLayerCount     = cast(u32) len(g_validation_layers) when ENABLE_VALIDATION else 0,
+        enabledLayerCount     = auto_cast len(g_validation_layers) when ENABLE_VALIDATION else 0,
         ppEnabledLayerNames   = raw_data(g_validation_layers[:])   when ENABLE_VALIDATION else nil,
     }
 
@@ -218,8 +230,9 @@ main :: proc() {
     defer vk.DestroyDevice(logical_device, nil)
 
     // @Note(Daniel): Retrieve queue handles
-    graphics_queue : vk.Queue
-    vk.GetDeviceQueue(logical_device, queue_families.graphics.?, 0, &graphics_queue)
+    graphics_queue, presentation_queue : vk.Queue
+    vk.GetDeviceQueue(logical_device, queue_family_indices.graphics.?,     0, &graphics_queue)
+    vk.GetDeviceQueue(logical_device, queue_family_indices.presentation.?, 0, &presentation_queue)
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
@@ -228,7 +241,8 @@ main :: proc() {
 }
 
 Queue_Families :: struct {
-    graphics : Maybe(u32),
+    graphics,
+    presentation : Maybe(u32),
 }
 
 create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
@@ -257,7 +271,7 @@ create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfo
     }
 }
 
-find_queue_families :: proc(device : vk.PhysicalDevice) -> (queue_families : Queue_Families) {
+find_queue_families :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR) -> (queue_family_indices : Queue_Families) {
     available_queue_family_count : u32
     vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, nil)
     available_queue_families := make([]vk.QueueFamilyProperties, available_queue_family_count)
@@ -265,10 +279,16 @@ find_queue_families :: proc(device : vk.PhysicalDevice) -> (queue_families : Que
     vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, raw_data(available_queue_families))
 
     for queue_family, index in available_queue_families {
-        if vk.QueueFlag.GRAPHICS not_in queue_family.queueFlags { continue }
+        present_support : b32
+        vk.GetPhysicalDeviceSurfaceSupportKHR(device, auto_cast index, surface, &present_support)
+        if present_support {
+            queue_family_indices.presentation = cast(u32) index
+        }
 
-        queue_families.graphics = cast(u32) index
-        break
+        if queue_family.queueFlags >= { .GRAPHICS } {
+            queue_family_indices.graphics = cast(u32) index
+            break
+        }
     }
 
     return
