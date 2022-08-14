@@ -415,6 +415,7 @@ _main :: proc() {
     }
     defer vk.DestroySwapchainKHR(logical_device, swapchain, nil)
 
+    // @Note(Daniel): Create swapchain images with associated image views
     swapchain_image_count : u32
     vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_image_count, nil)
     swapchain_images      := make([]vk.Image,     swapchain_image_count)
@@ -448,6 +449,9 @@ _main :: proc() {
     defer for view in swapchain_image_views {
         vk.DestroyImageView(logical_device, view, nil)
     }
+
+    // @Note(Daniel): Create graphics pipeline
+
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {

@@ -1,6 +1,7 @@
 #!/bin/sh
 
-EXE_NAME="primordial"
+MAIN_EXE_NAME="primordial"
+SHADERCOMP_NAME="shadercomp"
 BUILD_LABEL="release"
 BUILD_LEVEL="speed"
 
@@ -29,11 +30,17 @@ BUILD_DIR="build/${BUILD_LABEL}"
 [ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
-printf -n "Building ${BUILD_LABEL} binary"
+printf -n "Building ${BUILD_LABEL} binaries"
 [ -n "${VET_FLAG}" ] && printf " (vetted)"
 printf "...\n==========\n"
 
-odin build primordial -out:${BUILD_DIR}/${EXE_NAME} -o:${BUILD_LEVEL} ${DEBUG_FLAG} ${VET_FLAG} -microarch:native -show-timings
-[ "$?" -gt 0 ] && printf "==========\nFailed!" && exit 1
+echo "Shader compiler:"
+odin run shadercomp -out:${BUILD_DIR}/${SHADERCOMP_NAME} -o:${BUILD_LEVEL} ${DEBUG_FLAG} ${VET_FLAG} -microarch:native -show-timings
+[ "$?" -gt 0 ] && echo -e "==========\nBuild failed (shader compiler)!" && exit 1
 
-printf "==========\nDone."
+echo "=========="
+echo "Main program:"
+
+odin build primordial -out:${BUILD_DIR}/${MAIN_EXE_NAME} -o:${BUILD_LEVEL} ${DEBUG_FLAG} ${VET_FLAG} -microarch:native -show-timings
+[ "$?" -gt 0 ] && printf "==========\nBuild failed (Primordial)!" && exit 1
+printf "==========\nBuild successful."
