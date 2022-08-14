@@ -417,8 +417,37 @@ _main :: proc() {
 
     swapchain_image_count : u32
     vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_image_count, nil)
-    swapchain_images := make([]vk.Image, swapchain_image_count)
+    swapchain_images      := make([]vk.Image,     swapchain_image_count)
+    swapchain_image_views := make([]vk.ImageView, swapchain_image_count)
     vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_image_count, raw_data(swapchain_images))
+    for image, i in swapchain_images {
+        view_create_info := vk.ImageViewCreateInfo {
+            sType            = .IMAGE_VIEW_CREATE_INFO,
+            image            = image,
+            viewType         = .D2,
+            format           = swapchain_surface_format.format,
+            components       = {
+                r = .IDENTITY,
+                g = .IDENTITY,
+                b = .IDENTITY,
+                a = .IDENTITY,
+            },
+            subresourceRange = {
+                aspectMask     = { .COLOR },
+                baseMipLevel   = 0,
+                levelCount     = 1,
+                baseArrayLayer = 0,
+                layerCount     = 1,
+            },
+        }
+
+        if res := vk.CreateImageView(logical_device, &view_create_info, nil, &swapchain_image_views[i]); res != .SUCCESS {
+            log.panicf("Failed to create image view #{}! Error: {}", i, res)
+        }
+    }
+    defer for view in swapchain_image_views {
+        vk.DestroyImageView(logical_device, view, nil)
+    }
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
