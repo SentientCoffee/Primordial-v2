@@ -3,10 +3,8 @@ package primordial
 import "core:intrinsics"
 import "core:fmt"
 import "core:log"
-import "core:os"
 import "core:runtime"
 import "core:slice"
-import "core:strings"
 
 import "vendor:glfw"
 import vk "vendor:vulkan"
@@ -17,48 +15,10 @@ HEIGHT :: 600
 when ODIN_DEBUG { ENABLE_VALIDATION :: true  }
 else            { ENABLE_VALIDATION :: false }
 
-g_context : runtime.Context
-
-console_logger_proc :: proc(data : rawptr, level : log.Level, text : string, options : log.Options, location := #caller_location) {
-    WHITE  :: "\x1b[0m"
-    CYAN   :: "\x1b[36m"
-    GREEN  :: "\x1b[92m"
-    YELLOW :: "\x1b[93m"
-    RED    :: "\x1b[91m"
-
-    // @Note(Daniel): Not using data parameter
-
-    col := WHITE
-    if .Level in options {
-        if .Terminal_Color in options {
-            switch level {
-                case .Debug:   col = CYAN
-                case .Info:    col = GREEN
-                case .Warning: col = YELLOW
-                case .Error:   fallthrough
-                case .Fatal:   col = RED
-            }
-        }
-    }
-
-    format_str := fmt.tprintf("{}[{: 7s}] {{}} {}{}", col, level, text, WHITE)
-    if level == .Fatal {
-        loc_str := fmt.tprintf("[{}:{}:{}]", location.file_path, location.line, location.column)
-        fmt.printf(format_str, loc_str)
-        when ODIN_DEBUG { intrinsics.debug_trap() }
-        else { os.exit(1) }
-    }
-    else {
-        loc_str := fmt.tprintf("[{: 15s}:{}:{}]", location.procedure, location.line, location.column)
-        fmt.printf(format_str, loc_str)
-    }
-}
-
 when ODIN_DEBUG {
     import "core:mem"
-
     main :: proc() {
-        track: mem.Tracking_Allocator
+        track : mem.Tracking_Allocator
         mem.tracking_allocator_init(&track, context.allocator)
         context.allocator = mem.tracking_allocator(&track)
 
@@ -73,18 +33,12 @@ when ODIN_DEBUG {
     }
 }
 else {
+    import "core:os"
     main :: proc() { _main() }
 }
 
 _main :: proc() {
-    // @Note(Daniel): Setup context
-    context.logger = log.Logger {
-        data         = nil,
-        procedure    = console_logger_proc,
-        options      = { .Level, .Terminal_Color },
-        lowest_level = .Debug when ODIN_DEBUG else .Warning,
-    }
-    g_context = context
+    context = setup_context()
 
     // @Note(Daniel): Init window
     glfw.Init()
@@ -104,12 +58,13 @@ _main :: proc() {
     available_instance_extension_count : u32
     vk.EnumerateInstanceExtensionProperties(nil, &available_instance_extension_count, nil)
     available_instance_extensions := make([]vk.ExtensionProperties, available_instance_extension_count)
+    defer delete(available_instance_extensions)
     vk.EnumerateInstanceExtensionProperties(nil, &available_instance_extension_count, raw_data(available_instance_extensions))
 
     glfw_required_extensions       := glfw.GetRequiredInstanceExtensions()
     available_glfw_extension_count := 0
     for ext in &available_instance_extensions {
-        ext_name := strings.trim_null(string(ext.extensionName[:]))
+        ext_name := string(cstring(raw_data(ext.extensionName[:])))
         for glfw_ext in glfw_required_extensions {
             if string(glfw_ext) != ext_name { continue }
             available_glfw_extension_count += 1
@@ -126,6 +81,7 @@ _main :: proc() {
     when ENABLE_VALIDATION {
         append(&required_extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
     }
+    defer delete(required_extensions)
 
     // @Note(Daniel): Get validation layers
     when ENABLE_VALIDATION {
@@ -136,13 +92,14 @@ _main :: proc() {
         available_layer_count : u32
         vk.EnumerateInstanceLayerProperties(&available_layer_count, nil)
         available_layers := make([]vk.LayerProperties, available_layer_count)
+        defer delete(available_layers)
         vk.EnumerateInstanceLayerProperties(&available_layer_count, raw_data(available_layers))
 
         for needed_layer in validation_layers {
             layer_found := false
 
             for layer_props in &available_layers {
-                layer_name := strings.trim_null(string(layer_props.layerName[:]))
+                layer_name := string(cstring(raw_data(layer_props.layerName[:])))
                 if string(needed_layer) == layer_name {
                     layer_found = true
                     break
@@ -210,6 +167,7 @@ _main :: proc() {
         log.panicf("No physical device with Vulkan support found!\n")
     }
     available_physical_devices := make([]vk.PhysicalDevice, available_physical_device_count)
+    defer delete(available_physical_devices)
     vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, raw_data(available_physical_devices))
 
     required_device_extensions := []cstring {
@@ -218,6 +176,7 @@ _main :: proc() {
 
     Device_Candidate :: struct { device : vk.PhysicalDevice, score : int }
     device_candidates : [dynamic]Device_Candidate
+    defer delete(device_candidates)
     for device in available_physical_devices {
         // device_props    : vk.PhysicalDeviceProperties
         // device_features : vk.PhysicalDeviceFeatures
@@ -243,7 +202,7 @@ _main :: proc() {
         for needed_ext in required_device_extensions {
             ext_found := false
             for ext in &available_device_extensions {
-                ext_name := strings.trim_null(string(ext.extensionName[:]))
+                ext_name := string(cstring(raw_data(ext.extensionName[:])))
                 if string(needed_ext) == ext_name {
                     ext_found = true
                     break
@@ -256,7 +215,8 @@ _main :: proc() {
         }
 
         if score != 0 {
-            swapchain_available := get_swapchain_available_support(device, window_surface)
+            swapchain_available := swapchain_available_support_make(device, window_surface)
+            defer swapchain_available_support_delete(&swapchain_available)
 
             if len(swapchain_available.surface_formats) <= 0 { score = 0 }
             if len(swapchain_available.present_modes  ) <= 0 { score = 0 }
@@ -282,7 +242,7 @@ _main :: proc() {
     {
         device_props : vk.PhysicalDeviceProperties
         vk.GetPhysicalDeviceProperties(physical_device, &device_props)
-        device_name := strings.trim_null(string(device_props.deviceName[:]))
+        device_name := string(cstring(raw_data(device_props.deviceName[:])))
 
         available_device_extension_count : u32
         vk.EnumerateDeviceExtensionProperties(physical_device, nil, &available_device_extension_count, nil)
@@ -293,7 +253,7 @@ _main :: proc() {
         log.infof("Physical device chosen: {} ({})\n", device_name, device_props.deviceID)
         log.debug("Specified required extensions available:\n")
         for ext in &available_device_extensions {
-            ext_name := strings.trim_null(string(ext.extensionName[:]))
+            ext_name := string(cstring(raw_data(ext.extensionName[:])))
             for needed_ext in required_device_extensions {
                 if string(needed_ext) == ext_name {
                     log.debugf("    {}\n", ext_name)
@@ -350,7 +310,8 @@ _main :: proc() {
     vk.GetDeviceQueue(logical_device, queue_family_indices.presentation.?, 0, &presentation_queue)
 
     // @Note(Daniel): Create swapchain
-    swapchain_available := get_swapchain_available_support(physical_device, window_surface)
+    swapchain_available := swapchain_available_support_make(physical_device, window_surface)
+    defer swapchain_available_support_delete(&swapchain_available)
 
     swapchain_surface_format : vk.SurfaceFormatKHR
     for format in swapchain_available.surface_formats {
@@ -420,7 +381,10 @@ _main :: proc() {
     vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_image_count, nil)
     swapchain_images      := make([]vk.Image,     swapchain_image_count)
     swapchain_image_views := make([]vk.ImageView, swapchain_image_count)
+    defer delete(swapchain_images)
+    defer delete(swapchain_images_views)
     vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_image_count, raw_data(swapchain_images))
+    // @Note(Daniel): Create image views
     for image, i in swapchain_images {
         view_create_info := vk.ImageViewCreateInfo {
             sType            = .IMAGE_VIEW_CREATE_INFO,
@@ -452,7 +416,6 @@ _main :: proc() {
 
     // @Note(Daniel): Create graphics pipeline
 
-
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents();
@@ -463,43 +426,6 @@ Queue_Family_Indices :: struct {
     graphics,
     presentation : Maybe(u32),
 }
-
-Swapchain_Available_Support :: struct {
-    capabilities    : vk.SurfaceCapabilitiesKHR,
-    surface_formats : []vk.SurfaceFormatKHR,
-    present_modes   : []vk.PresentModeKHR,
-}
-
-create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
-    debug_callback :: proc "system" (
-        message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
-        message_type_flags : vk.DebugUtilsMessageTypeFlagsEXT,
-        callback_data      : ^vk.DebugUtilsMessengerCallbackDataEXT,
-        user_data          : rawptr,
-    ) -> b32 {
-        context = g_context
-        if callback_data.messageIdNumber == 0xde3cbaf { return false }
-
-        format_str := fmt.tprintf("Validation{{}}: {}\n", callback_data.pMessage)
-
-        switch {
-            case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
-            case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
-            case:                                  log.debugf(format_str, "")
-        }
-
-        return false
-    }
-
-    return {
-        sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        messageSeverity = { .VERBOSE, .WARNING, .ERROR },
-        messageType     = { .GENERAL, .VALIDATION, .PERFORMANCE },
-        pfnUserCallback = debug_callback,
-        pUserData       = nil,
-    }
-}
-
 find_queue_families :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR) -> (queue_family_indices : Queue_Family_Indices) {
     available_queue_family_count : u32
     vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, nil)
@@ -523,18 +449,106 @@ find_queue_families :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR)
     return
 }
 
-get_swapchain_available_support :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR) -> (swapchain_available : Swapchain_Available_Support) {
+Swapchain_Available_Support :: struct {
+    capabilities    : vk.SurfaceCapabilitiesKHR,
+    surface_formats : []vk.SurfaceFormatKHR,
+    present_modes   : []vk.PresentModeKHR,
+}
+swapchain_available_support_make :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR, allocator := context.allocator, location := #caller_location) -> (swapchain_available : Swapchain_Available_Support) {
     vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &swapchain_available.capabilities)
 
     available_surface_format_count : u32
     vk.GetPhysicalDeviceSurfaceFormatsKHR(device, surface, &available_surface_format_count, nil)
-    swapchain_available.surface_formats = make([]vk.SurfaceFormatKHR, available_surface_format_count)
+    swapchain_available.surface_formats = make([]vk.SurfaceFormatKHR, available_surface_format_count, allocator, location)
     vk.GetPhysicalDeviceSurfaceFormatsKHR(device, surface, &available_surface_format_count, raw_data(swapchain_available.surface_formats))
 
     available_present_mode_count : u32
     vk.GetPhysicalDeviceSurfacePresentModesKHR(device, surface, &available_present_mode_count, nil)
-    swapchain_available.present_modes = make([]vk.PresentModeKHR, available_present_mode_count)
+    swapchain_available.present_modes = make([]vk.PresentModeKHR, available_present_mode_count, allocator, location)
+
     vk.GetPhysicalDeviceSurfacePresentModesKHR(device, surface, &available_present_mode_count, raw_data(swapchain_available.present_modes))
 
     return
+}
+swapchain_available_support_delete :: proc(using swapchain_available : ^Swapchain_Available_Support) {
+    delete(surface_formats)
+    delete(present_modes)
+}
+
+setup_context :: proc "c" () -> (ctx : runtime.Context) {
+    console_logger_proc :: proc(data : rawptr, level : log.Level, text : string, options : log.Options, location := #caller_location) {
+        WHITE  :: "\x1b[0m"
+        CYAN   :: "\x1b[36m"
+        GREEN  :: "\x1b[92m"
+        YELLOW :: "\x1b[93m"
+        RED    :: "\x1b[91m"
+
+        // @Note(Daniel): Not using data parameter
+
+        col := WHITE
+        if .Level in options {
+            if .Terminal_Color in options {
+                switch level {
+                    case .Debug:   col = CYAN
+                    case .Info:    col = GREEN
+                    case .Warning: col = YELLOW
+                    case .Error:   fallthrough
+                    case .Fatal:   col = RED
+                }
+            }
+        }
+
+        format_str := fmt.tprintf("{}[{: 7s}] {{}} {}{}", col, level, text, WHITE)
+        if level == .Fatal {
+            loc_str := fmt.tprintf("[{}:{}:{}]", location.file_path, location.line, location.column)
+            fmt.printf(format_str, loc_str)
+            when ODIN_DEBUG { intrinsics.debug_trap() }
+            else { os.exit(1) }
+        }
+        else {
+            loc_str := fmt.tprintf("[{: 15s}:{}:{}]", location.procedure, location.line, location.column)
+            fmt.printf(format_str, loc_str)
+        }
+    }
+
+    ctx = runtime.default_context()
+    ctx.logger = log.Logger {
+        data         = nil,
+        procedure    = console_logger_proc,
+        options      = { .Level, .Terminal_Color },
+        lowest_level = .Info when ODIN_DEBUG else .Warning,
+    }
+
+    return
+}
+
+
+create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
+    debug_callback :: proc "system" (
+        message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
+        message_type_flags : vk.DebugUtilsMessageTypeFlagsEXT,
+        callback_data      : ^vk.DebugUtilsMessengerCallbackDataEXT,
+        user_data          : rawptr,
+    ) -> b32 {
+        context = setup_context()
+        if callback_data.messageIdNumber == 0xde3cbaf { return false }
+
+        format_str := fmt.tprintf("Validation{{}}: {}\n", callback_data.pMessage)
+
+        switch {
+            case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
+            case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
+            case:                                  log.debugf(format_str, "")
+        }
+
+        return false
+    }
+
+    return {
+        sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        messageSeverity = { .VERBOSE, .WARNING, .ERROR },
+        messageType     = { .GENERAL, .VALIDATION, .PERFORMANCE },
+        pfnUserCallback = debug_callback,
+        pUserData       = nil,
+    }
 }

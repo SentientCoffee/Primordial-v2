@@ -5,125 +5,94 @@
       "path": "..",
     },
     {
-      "name": "Source",
-      "path": "../primordial",
-    },
-    {
       "name": "Odin Core",
-      "path": "/usr/lib/odin/core"
+      "path": "C:/Users/dapresas/bin/odin/core"
+      // "path": "/usr/lib/odin/core"
     },
     {
       "name": "Odin Vendor",
-      "path": "/usr/lib/odin/vendor"
+      "path": "C:/Users/dapresas/bin/odin/vendor"
+      // "path": "/usr/lib/odin/vendor",
     }
   ],
   "tasks": {
     "version": "2.0.0",
-    "tasks"  : [
+    "options": {
+      "cwd": "${workspaceFolder:Root}",
+      "env": { "ODIN_ERROR_POS_STYLE": "unix" }
+    },
+    "presentation": {
+      "echo"            : true,
+      "reveal"          : "always",
+      "focus"           : false,
+      "panel"           : "shared",
+      "showReuseMessage": false,
+      "clear"           : true,
+    },
+    "problemMatcher": {
+      "owner"       : "odin",
+      "source"      : "odin",
+      "fileLocation": "absolute",
+      "severity"    : "error",
+      "pattern"     : {
+        "regexp" : "(.*)[(:]([0-9]+)[:]([0-9]+)[):](.*)",
+        "file"   : 1,
+        "line"   : 2,
+        "column" : 3,
+        "message": 4,
+      },
+    },
+    "group": {
+      "kind": "build",
+      "isDefault": false,
+    },
+    "windows": {
+      "options": {
+        "shell": {
+          "executable": "${env:WinDir}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "args"      : [ "-NoLogo" ]
+        },
+      }
+    },
+    "tasks": [
       {
         "label"  : "Build debug",
         "detail" : "Build debug binary with debug symbols",
         "type"   : "shell",
-        "command": "./build.sh debug",
-        "options": {
-          "cwd": "${workspaceFolder:Root}",
-          "env": { "ODIN_ERROR_POS_STYLE": "unix" }
+        "linux": {
+          "command": "./build.sh debug",
         },
-        "presentation": {
-          "echo"            : true,
-          "reveal"          : "always",
-          "focus"           : false,
-          "panel"           : "shared",
-          "showReuseMessage": false,
-          "clear"           : true,
-        },
-        "problemMatcher": {
-          "owner"       : "odin",
-          "source"      : "odin",
-          "fileLocation": "absolute",
-          "severity"    : "error",
-          "pattern"     : {
-            "regexp" : "(.*)[(:]([0-9]+)[:]([0-9]+)[):](.*)",
-            "file"   : 1,
-            "line"   : 2,
-            "column" : 3,
-            "message": 4,
-          },
+        "windows": {
+          // "command": "build.bat debug",
+          "command": "./build.ps1 -Debug",
         },
         "group": {
-          "kind": "build",
-          "isDefault": true,
+          "isDefault": true
         }
       },
       {
         "label"  : "Build debug (vet)",
         "detail" : "Build vetted debug binary with debug symbols",
         "type"   : "shell",
-        "command": "./build.sh debug vet",
-        "options": {
-          "cwd": "${workspaceFolder:Root}",
-          "env": { "ODIN_ERROR_POS_STYLE": "unix" }
+        "linux": {
+          "command": "./build.sh debug vet",
         },
-        "presentation": {
-          "echo"            : true,
-          "reveal"          : "always",
-          "focus"           : false,
-          "panel"           : "shared",
-          "showReuseMessage": false,
-          "clear"           : true,
+        "windows": {
+          // "command": "build.bat debug vet",
+          "command": "./build.ps1 -Debug -Vet",
         },
-        "problemMatcher": {
-          "owner"       : "odin",
-          "source"      : "odin",
-          "fileLocation": "absolute",
-          "severity"    : "error",
-          "pattern"     : {
-            "regexp" : "(.*)[(]([0-9]+)[:]([0-9]+)[)](.*)",
-            "file"   : 1,
-            "line"   : 2,
-            "column" : 3,
-            "message": 4,
-          },
-        },
-        "group": {
-          "kind"     : "build",
-          "isDefault": false,
-        }
       },
       {
         "label"  : "Build release",
         "detail" : "Build release binary",
         "type"   : "shell",
-        "command": "./build.sh vet",
-        "options": {
-          "cwd": "${workspaceFolder:Root}",
-          "env": { "ODIN_ERROR_POS_STYLE": "unix" }
+        "linux": {
+          "command": "./build.sh vet",
         },
-        "presentation": {
-          "echo"            : true,
-          "reveal"          : "always",
-          "focus"           : false,
-          "panel"           : "shared",
-          "showReuseMessage": false,
-          "clear"           : true,
+        "windows": {
+          // "command": "build.bat vet",
+          "command": "./build.ps1 -Vet",
         },
-        "problemMatcher": {
-          "owner"       : "odin",
-          "source"      : "odin",
-          "fileLocation": "absolute",
-          "severity"    : "error",
-          "pattern"     : {
-            "regexp" : "(.*)[(]([0-9]+)[:]([0-9]+)[)](.*)",
-            "file"   : 1,
-            "line"   : 2,
-            "column" : 3,
-            "message": 4,
-          },
-        },
-        "group": {
-          "kind"     : "build",
-          "isDefault": false,
-        }
       }
     ]
   },
@@ -153,20 +122,39 @@
         "stopAtEntry"           : false,
         "MIMode"                : "gdb",
         "miDebuggerPath"        : "/usr/bin/gdb"
-      }
+      },
+      {
+        "name"                  : "Build and debug (C/C++ MSVC)",
+        "type"                  : "cppvsdbg",
+        "request"               : "launch",
+        "program"               : "${workspaceFolder:Root}/build/debug/primordial_d.exe",
+        "cwd"                   : "${workspaceFolder:Root}",
+        "preLaunchTask"         : "Build debug",
+        "console"               : "integratedTerminal",
+        "internalConsoleOptions": "neverOpen",
+        "stopAtEntry"           : false,
+      },
     ]
   },
   "settings": {
     "debug.allowBreakpointsEverywhere": true,
 
-    "alignment.surroundSpace": {
+    "betterAlign.surroundSpace": {
       "colon"     : [ 1, 1 ],
       "assignment": [ 1, 1 ],
       "arrow"     : [ 1, 1 ],
       "comment"   : 2,
     },
+
+    "powershell.cwd": "C:\\Users\\dapresas\\Repos\\Primordial-v2",
+
     "todo-tree.filtering.excludeGlobs": [
-      "/usr/lib/odin/**"
-    ]
+      "/usr/lib/odin/**",
+      "C:/Users/dapresas/bin/odin/**"
+    ],
+
+    "[bat]": {
+      "files.trimTrailingWhitespace": false,
+    },
   },
 }

@@ -3,18 +3,20 @@ param (
     [switch]$Vet   = $false
 )
 
-$EXE_NAME    = "primordial"
-$BUILD_LABEL = "release"
-$BUILD_LEVEL = "speed"
+$MAIN_EXE_NAME   = "primordial"
+$SHADERCOMP_NAME = "shadercomp"
+$BUILD_LABEL     = "release"
+$BUILD_LEVEL     = "speed"
 
 $DEBUG_FLAG = ""
 $VET_FLAG   = ""
 
 if ($Debug) {
-    $EXE_NAME = $EXE_NAME + "_d"
-    $BUILD_LABEL = "debug"
-    $BUILD_LEVEL = "minimal"
-    $DEBUG_FLAG = "-debug"
+    $MAIN_EXE_NAME   += "_d"
+    $SHADERCOMP_NAME += "_d"
+    $BUILD_LABEL      = "debug"
+    $BUILD_LEVEL      = "minimal"
+    $DEBUG_FLAG       = "-debug"
 }
 
 if ($Vet) {
@@ -29,15 +31,23 @@ if (Test-Path -Path $BUILD_DIR) {
 }
 $null = New-Item -Path $BUILD_DIR -type Directory
 
-$message = "Building $BUILD_LABEL binary"
+$message = "Building $BUILD_LABEL binaries"
 if ($Vet) { $message += " (vetted)" }
 $message += "..."
-Write-Host "$message`n=========="
+Write-Host -ForegroundColor Blue "$message`n=========="
 
-odin build primordial -out:"$BUILD_DIR\$EXE_NAME.exe" -o:$BUILD_LEVEL $DEBUG_FLAG $VET_FLAG -microarch:native -show-timings
+Write-Host -ForegroundColor Blue "Shader compiler:"
+odin run shadercomp -out:"$BUILD_DIR\$SHADERCOMP_NAME.exe" -o:$BUILD_LEVEL $DEBUG_FLAG $VET_FLAG -microarch:native -show-timings
 if (! $?) {
-    Write-Host "==========`nFailed!"
+    Write-Host -ForegroundColor Red "==========`nBuild failed (shader compiler)!"
     Exit 1
 }
 
-Write-Host "==========`nDone."
+Write-Host -ForegroundColor Blue "==========`nMain program:"
+odin build primordial -out:"$BUILD_DIR\$MAIN_EXE_NAME.exe" -o:$BUILD_LEVEL $DEBUG_FLAG $VET_FLAG -microarch:native -show-timings
+if (! $?) {
+    Write-Host -ForegroundColor Red "==========`nBuild failed (Primordial)!"
+    Exit 1
+}
+
+Write-Host -ForegroundColor Blue "==========`nBuild successful."
