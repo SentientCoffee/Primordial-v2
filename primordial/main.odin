@@ -382,7 +382,7 @@ _main :: proc() {
     swapchain_images      := make([]vk.Image,     swapchain_image_count)
     swapchain_image_views := make([]vk.ImageView, swapchain_image_count)
     defer delete(swapchain_images)
-    defer delete(swapchain_images_views)
+    defer delete(swapchain_image_views)
     vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_image_count, raw_data(swapchain_images))
     // @Note(Daniel): Create image views
     for image, i in swapchain_images {
