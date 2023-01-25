@@ -50,4 +50,5 @@ odin run shadercomp -out:"${BUILD_DIR}/${SHADERCOMP_NAME}" -o:${BUILD_LEVEL} ${D
 printf "${bold_blue}==========\nMain program:\n${reset}"
 odin build primordial -out:"${BUILD_DIR}/${MAIN_EXE_NAME}" -o:${BUILD_LEVEL} ${DEBUG_FLAG} ${VET_FLAG} -microarch:native -show-timings
 [ "$?" -gt 0 ] && printf "${bold_red}==========\nBuild failed (Primordial)!${reset}" && exit 1
+
 printf "${bold_blue}==========\nBuild successful.\n${reset}"

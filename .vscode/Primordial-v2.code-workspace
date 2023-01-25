@@ -100,7 +100,7 @@
     "version"       : "0.2.0",
     "configurations": [
       {
-        "name"                  : "Build and debug (CodeLLDB)",
+        "name"                  : "Debug Primordial (CodeLLDB)",
         "type"                  : "lldb",
         "request"               : "launch",
         "program"               : "${workspaceFolder:Root}/build/debug/primordial_d",
@@ -111,7 +111,7 @@
         "stopOnEntry"           : false,
       },
       {
-        "name"                  : "Build and debug (C/C++ GDB)",
+        "name"                  : "Debug Primordial (C/C++ GDB)",
         "type"                  : "cppdbg",
         "request"               : "launch",
         "program"               : "${workspaceFolder:Root}/build/debug/primordial_d",
@@ -124,16 +124,27 @@
         "miDebuggerPath"        : "/usr/bin/gdb"
       },
       {
-        "name"                  : "Build and debug (C/C++ MSVC)",
-        "type"                  : "cppvsdbg",
+        "name"                  : "Debug shader compiler (CodeLLDB)",
+        "type"                  : "lldb",
         "request"               : "launch",
-        "program"               : "${workspaceFolder:Root}/build/debug/primordial_d.exe",
+        "program"               : "${workspaceFolder:Root}/build/debug/shadercomp_d",
         "cwd"                   : "${workspaceFolder:Root}",
-        "preLaunchTask"         : "Build debug",
-        "console"               : "integratedTerminal",
+        "terminal"              : "integrated",
         "internalConsoleOptions": "neverOpen",
-        "stopAtEntry"           : false,
+        "stopOnEntry"           : false,
       },
+      {
+        "name"                  : "Debug shader compiler (C/C++ GDB)",
+        "type"                  : "cppdbg",
+        "request"               : "launch",
+        "program"               : "${workspaceFolder:Root}/build/debug/shadercomp_d",
+        "cwd"                   : "${workspaceFolder:Root}",
+        "internalConsoleOptions": "neverOpen",
+        "externalConsole"       : false,
+        "stopAtEntry"           : false,
+        "MIMode"                : "gdb",
+        "miDebuggerPath"        : "/usr/bin/gdb"
+      }
     ]
   },
   "settings": {
