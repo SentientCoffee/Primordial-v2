@@ -9,6 +9,10 @@ import "core:slice"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
+when ODIN_OS == .Windows {
+    import win32 "core:sys/windows"
+}
+
 WIDTH  :: 800
 HEIGHT :: 600
 
@@ -477,31 +481,48 @@ swapchain_available_support_delete :: proc(using swapchain_available : ^Swapchai
 
 setup_context :: proc "c" () -> (ctx : runtime.Context) {
     console_logger_proc :: proc(data : rawptr, level : log.Level, text : string, options : log.Options, location := #caller_location) {
-        WHITE  :: "\x1b[0m"
-        CYAN   :: "\x1b[36m"
-        GREEN  :: "\x1b[92m"
-        YELLOW :: "\x1b[93m"
-        RED    :: "\x1b[91m"
-
         // @Note(Daniel): Not using data parameter
 
-        col := WHITE
-        if .Level in options {
-            if .Terminal_Color in options {
-                switch level {
-                    case .Debug:   col = CYAN
-                    case .Info:    col = GREEN
-                    case .Warning: col = YELLOW
-                    case .Error:   fallthrough
-                    case .Fatal:   col = RED
-                }
-            }
+        when ODIN_OS == .Windows {
+            WHITE  :: win32.FOREGROUND_RED | win32.FOREGROUND_GREEN | win32.FOREGROUND_BLUE
+            CYAN   :: win32.FOREGROUND_BLUE | win32.FOREGROUND_GREEN
+            GREEN  :: win32.FOREGROUND_GREEN | win32.FOREGROUND_INTENSITY
+            YELLOW :: win32.FOREGROUND_RED | win32.FOREGROUND_GREEN | win32.FOREGROUND_INTENSITY
+            RED    :: win32.FOREGROUND_RED | win32.FOREGROUND_INTENSITY
+        }
+        else {
+            WHITE  :: "\x1b[0m"
+            CYAN   :: "\x1b[36m"
+            GREEN  :: "\x1b[92m"
+            YELLOW :: "\x1b[93m"
+            RED    :: "\x1b[91m"
         }
 
-        format_str := fmt.tprintf("{}[{: 7s}] {{}} {}{}", col, level, text, WHITE)
+        col := WHITE
+        if options >= { .Level, .Terminal_Color } {
+            switch level {
+                case .Debug:   col = CYAN
+                case .Info:    col = GREEN
+                case .Warning: col = YELLOW
+                case .Error:   fallthrough
+                case .Fatal:   col = RED
+            }
+        }
+        log_level, ok := fmt.enum_value_to_string(level)
+        if !ok { log_level = "Trace" }
+
+        when ODIN_OS == .Windows {
+            win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), col)
+            format_str := fmt.tprintf("[{: 7s}] {{}} {}", log_level, text)
+        }
+        else {
+            format_str := fmt.tprintf("{}[{: 7s}] {{}} {}{}", col, log_level, text, WHITE)
+        }
+
         if level == .Fatal {
             loc_str := fmt.tprintf("[{}:{}:{}]", location.file_path, location.line, location.column)
             fmt.printf(format_str, loc_str)
+            when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE) }
             when ODIN_DEBUG { intrinsics.debug_trap() }
             else { os.exit(1) }
         }
@@ -516,7 +537,7 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
         data         = nil,
         procedure    = console_logger_proc,
         options      = { .Level, .Terminal_Color },
-        lowest_level = .Info when ODIN_DEBUG else .Warning,
+        lowest_level = .Debug when ODIN_DEBUG else .Warning,
     }
 
     return
@@ -524,6 +545,7 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
 
 
 create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
+
     debug_callback :: proc "system" (
         message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
         message_type_flags : vk.DebugUtilsMessageTypeFlagsEXT,
@@ -531,14 +553,17 @@ create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfo
         user_data          : rawptr,
     ) -> b32 {
         context = setup_context()
-        if callback_data.messageIdNumber == 0xde3cbaf { return false }
+        switch {
+            case callback_data.messageIdNumber == 0xde3cbaf:      /* fallthrough */
+            // case callback_data.pMessageIdName == "Loader Message":
+                return false
+        }
 
-        format_str := fmt.tprintf("Validation{{}}: {}\n", callback_data.pMessage)
-
+        format_str := fmt.tprintf("Validation{{}} ({}): {}\n", callback_data.pMessageIdName, callback_data.pMessage)
         switch {
             case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
             case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
-            case:                                  log.debugf(format_str, "")
+            case:                                  log.logf(log.Level(100), format_str, "")
         }
 
         return false
