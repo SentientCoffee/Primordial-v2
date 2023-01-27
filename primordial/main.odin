@@ -713,6 +713,32 @@ _main :: proc() {
     }
     log.debugf("Created {} swapchain framebuffer(s)", len(swapchain_framebuffers))
 
+    // @Note(Daniel): Create command pool
+    command_pool_create_info := vk.CommandPoolCreateInfo {
+        sType            = .COMMAND_POOL_CREATE_INFO,
+        flags            = { .RESET_COMMAND_BUFFER },
+        queueFamilyIndex = queue_family_indices.graphics.?,
+    }
+    command_pool : vk.CommandPool
+    if res := vk.CreateCommandPool(logical_device, &command_pool_create_info, nil, &command_pool); res != .SUCCESS {
+        log.panicf("Failed to create command pool! Error: {}", res)
+    }
+    defer vk.DestroyCommandPool(logical_device, command_pool, nil)
+    log.debug("Created command pool")
+
+    // @Note(Daniel): Allocate command buffer
+    command_buffer_alloc_info := vk.CommandBufferAllocateInfo {
+        sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+        commandPool        = command_pool,
+        level              = .PRIMARY,
+        commandBufferCount = 1,
+    }
+    command_buffer : vk.CommandBuffer
+    if res := vk.AllocateCommandBuffers(logical_device, &command_buffer_alloc_info, &command_buffer); res != .SUCCESS {
+        log.panicf("Failed to allocate command buffer(s)! Error: {}", res)
+    }
+    log.debugf("Allocated {} command buffer(s)", command_buffer_alloc_info.commandBufferCount)
+
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
         // @Note(Daniel): Poll input events
