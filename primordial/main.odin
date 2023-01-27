@@ -16,6 +16,7 @@ when ODIN_OS == .Windows {
 
 WIDTH  :: 800
 HEIGHT :: 600
+TITLE  :: "Vulkan"
 
 when ODIN_DEBUG { ENABLE_VALIDATION :: true  }
 else            { ENABLE_VALIDATION :: false }
@@ -51,12 +52,15 @@ _main :: proc() {
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
     glfw.WindowHint(glfw.RESIZABLE, 0)
 
-    window := glfw.CreateWindow(WIDTH, HEIGHT, "Vulkan", nil, nil)
+    window := glfw.CreateWindow(WIDTH, HEIGHT, TITLE, nil, nil)
     defer glfw.DestroyWindow(window);
+
+    log.debugf("Created window \"{}\" ({}x{})", TITLE, WIDTH, HEIGHT)
 
     // @Note(Daniel): Load Vulkan global procs
     // @Reference: https://gist.github.com/terickson001/bdaa52ce621a6c7f4120abba8959ffe6#file-main-odin-L216
     vk.load_proc_addresses_global(cast(rawptr) glfw.GetInstanceProcAddress)
+    log.debug("Loaded global Vulkan proc addresses")
 
     // @Note(Daniel): Get required instance extensions
     available_instance_extension_count : u32
@@ -145,13 +149,16 @@ _main :: proc() {
         log.panicf("Failed to create Vulkan instance! Error: {}\n", res)
     }
     defer vk.DestroyInstance(instance, nil)
+    log.debug("Created new Vulkan instance")
     vk.load_proc_addresses_instance(instance)
+    log.debug("Loaded instance-specific Vulkan proc addresses")
 
     // @Note(Daniel): Create debug messenger
     when ENABLE_VALIDATION {
         debug_messenger : vk.DebugUtilsMessengerEXT
         debug_messenger_create_info := debug_messenger_create_info_create()
         vk.CreateDebugUtilsMessengerEXT(instance, &debug_messenger_create_info, nil, &debug_messenger)
+        log.debug("Created debug messenger")
     }
     defer when ENABLE_VALIDATION {
         vk.DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
@@ -163,6 +170,7 @@ _main :: proc() {
         log.panicf("Failed to create window surface! Error: {}\n", res)
     }
     defer vk.DestroySurfaceKHR(instance, window_surface, nil)
+    log.debug("Created window surface")
 
     // @Note(Daniel): Get physical device candidates
     available_physical_device_count : u32
@@ -254,13 +262,13 @@ _main :: proc() {
         defer delete(available_device_extensions)
         vk.EnumerateDeviceExtensionProperties(physical_device, nil, &available_device_extension_count, raw_data(available_device_extensions))
 
-        log.infof("Physical device chosen: {} ({})\n", device_name, device_props.deviceID)
-        log.debug("Specified required extensions available:\n")
+        log.infof("Physical device chosen: {} ({})", device_name, device_props.deviceID)
+        log.debug("Specified required extensions available:")
         for ext in &available_device_extensions {
             ext_name := string(cstring(raw_data(ext.extensionName[:])))
             for needed_ext in required_device_extensions {
                 if string(needed_ext) == ext_name {
-                    log.debugf("    {}\n", ext_name)
+                    log.debugf("    -- {}", ext_name)
                 }
             }
         }
@@ -307,6 +315,7 @@ _main :: proc() {
         log.panicf("Failed to create logical device! Error: {}\n", res)
     }
     defer vk.DestroyDevice(logical_device, nil)
+    log.debug("Created logical device")
 
     // @Note(Daniel): Retrieve queue handles
     graphics_queue, presentation_queue : vk.Queue
@@ -379,6 +388,9 @@ _main :: proc() {
         log.panicf("Failed to create swapchain! Error: {}\n", res)
     }
     defer vk.DestroySwapchainKHR(logical_device, swapchain, nil)
+    log.debugf("Created swapchain ({}x{})", swapchain_extents.width, swapchain_extents.height)
+    log.debugf("    -- Image format: {}", swapchain_surface_format.format)
+    log.debugf("    -- Present mode: {}", swapchain_present_mode)
 
     // @Note(Daniel): Create swapchain images with associated image views
     swapchain_image_count : u32
@@ -417,13 +429,16 @@ _main :: proc() {
     defer for view in swapchain_image_views {
         vk.DestroyImageView(logical_device, view, nil)
     }
+    log.debugf("Created {} swapchain image(s) and image view(s)", swapchain_image_count)
 
     // @Note(Daniel): Create shader modules
+    VERT_SHADER_PATH :: "build/shader_cache/triangle.glsl/triangle.glsl.vert.spv"
+    FRAG_SHADER_PATH :: "build/shader_cache/triangle.glsl/triangle.glsl.frag.spv"
 
     // Vertex shader
-    vert_shader_src, read_vert_ok := os.read_entire_file("build/shader_cache/triangle.glsl.vert.spv")
+    vert_shader_src, read_vert_ok := os.read_entire_file(VERT_SHADER_PATH)
     if !read_vert_ok {
-        log.panicf("Failed to read vertex shader source!")
+        log.panicf("Failed to read vertex shader source from \"{}\"!", VERT_SHADER_PATH)
     }
     vert_shader_module_create_info := vk.ShaderModuleCreateInfo {
         sType    = .SHADER_MODULE_CREATE_INFO,
@@ -432,7 +447,8 @@ _main :: proc() {
     }
     vert_shader_module : vk.ShaderModule
     if res := vk.CreateShaderModule(logical_device, &vert_shader_module_create_info, nil, &vert_shader_module); res != .SUCCESS {
-        log.panicf("Failed to create vertex shader module! Error: {}", res)
+        log.errorf("Failed to create vertex shader module from path \"{}\"!", VERT_SHADER_PATH)
+        log.panicf("    Error: {}", res)
     }
     vert_shader_stage_create_info := vk.PipelineShaderStageCreateInfo {
         sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -441,11 +457,12 @@ _main :: proc() {
         pName  = "main",
     }
     defer vk.DestroyShaderModule(logical_device, vert_shader_module, nil)
+    log.debugf("Created vertex shader module from \"{}\"", VERT_SHADER_PATH)
 
     // Fragment shader
-    frag_shader_src, read_frag_ok := os.read_entire_file("build/shader_cache/triangle.glsl.frag.spv")
+    frag_shader_src, read_frag_ok := os.read_entire_file(FRAG_SHADER_PATH)
     if !read_frag_ok {
-        log.panicf("Failed to read vertex shader source!")
+        log.panicf("Failed to read fragment shader source from \"{}\"!", FRAG_SHADER_PATH)
     }
     frag_shader_module_create_info := vk.ShaderModuleCreateInfo {
         sType    = .SHADER_MODULE_CREATE_INFO,
@@ -454,7 +471,8 @@ _main :: proc() {
     }
     frag_shader_module : vk.ShaderModule
     if res := vk.CreateShaderModule(logical_device, &frag_shader_module_create_info, nil, &frag_shader_module); res != .SUCCESS {
-        log.panicf("Failed to create fragment shader module! Error: {}", res)
+        log.errorf("Failed to create fragment shader module from path \"{}\"!", FRAG_SHADER_PATH)
+        log.panicf("    Error: {}", res)
     }
     frag_shader_stage_create_info := vk.PipelineShaderStageCreateInfo {
         sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -463,6 +481,7 @@ _main :: proc() {
         pName  = "main",
     }
     defer vk.DestroyShaderModule(logical_device, frag_shader_module, nil)
+    log.debugf("Created fragment shader module from \"{}\"", FRAG_SHADER_PATH)
 
     pipeline_shader_stages := [?]vk.PipelineShaderStageCreateInfo { vert_shader_stage_create_info, frag_shader_stage_create_info }
 
@@ -569,6 +588,7 @@ _main :: proc() {
         log.panicf("Failed to create pipeline layout! Error: {}", res)
     }
     defer vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
+    log.debug("Created pipeline layout")
 
     // @Note(Daniel): Create render pass
 
@@ -608,6 +628,7 @@ _main :: proc() {
         log.panicf("Failed to create render pass! Error: {}", res)
     }
     defer vk.DestroyRenderPass(logical_device, render_pass, nil)
+    log.debug("Created render pass")
 
     // @Note(Daniel): Create final graphics pipeline
     graphics_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
@@ -638,6 +659,22 @@ _main :: proc() {
         log.panicf("Failed to create graphics pipeline! Error: {}", res)
     }
     defer vk.DestroyPipeline(logical_device, graphics_pipeline, nil)
+    log.info("Created graphics pipeline")
+    {
+        log.debugf("    -- Shader stages: {}", len(pipeline_shader_stages))
+        // @Todo(Daniel): File a bug for this?
+        // for stage, i in graphics_pipeline_create_info.pStages[:graphics_pipeline_create_info.stageCount] {
+        //     log.debugf("        -- {}: {}", i, stage)
+        // }
+        log.debugf("    -- Dynamic states: {}", dynamic_states)
+        log.debugf("    -- Viewports: {}, scissors: {}", viewport_state_create_info.viewportCount, viewport_state_create_info.scissorCount)
+        log.debugf("    -- Subpasses: {} ({} total attachments)", render_pass_create_info.subpassCount, render_pass_create_info.attachmentCount)
+        for subpass, i in render_pass_create_info.pSubpasses[:render_pass_create_info.subpassCount] {
+            log.debugf("        -- {}: {} ({} color attachments)", i, subpass.pipelineBindPoint, subpass.colorAttachmentCount)
+        }
+    }
+
+    // @Note(Daniel): Create framebuffers
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
@@ -732,22 +769,23 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
 
         when ODIN_OS == .Windows {
             win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), col)
-            format_str := fmt.tprintf("[{: 7s}] {{}} {}", log_level, text)
+            format_str := fmt.tprintf("[{: 7s}] [{{: 20s}}] {}\n", log_level, text)
         }
         else {
-            format_str := fmt.tprintf("{}[{: 7s}] {{}} {}{}", col, log_level, text, WHITE)
+            format_str := fmt.tprintf("{}[{: 7s}] [{{: 20s}}] {}{}\n", col, log_level, text, WHITE)
         }
 
         if level == .Fatal {
-            loc_str := fmt.tprintf("[{}:{}:{}]", location.file_path, location.line, location.column)
+            loc_str := fmt.tprintf("{}:{}:{}", location.file_path, location.line, location.column)
             fmt.printf(format_str, loc_str)
             when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE) }
             when ODIN_DEBUG { intrinsics.debug_trap() }
             else { os.exit(1) }
         }
         else {
-            loc_str := fmt.tprintf("[{: 15s}:{}:{}]", location.procedure, location.line, location.column)
+            loc_str := fmt.tprintf("{}:{}:{}", location.procedure, location.line, location.column)
             fmt.printf(format_str, loc_str)
+            when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE) }
         }
     }
 
@@ -772,12 +810,12 @@ debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfo
     ) -> b32 {
         context = setup_context()
         switch {
-            case callback_data.messageIdNumber == 0xde3cbaf:      /* fallthrough */
-            // case callback_data.pMessageIdName == "Loader Message":
+            case callback_data.messageIdNumber == 0xde3cbaf:       fallthrough
+            case callback_data.pMessageIdName == "Loader Message":
                 return false
         }
 
-        format_str := fmt.tprintf("Validation{{}} ({}): {}\n", callback_data.pMessageIdName, callback_data.pMessage)
+        format_str := fmt.tprintf("Validation{{}} ({}): {}", callback_data.pMessageIdName, callback_data.pMessage)
         switch {
             case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
             case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
