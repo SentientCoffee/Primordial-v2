@@ -6,6 +6,7 @@ import "core:log"
 import "core:os"
 import "core:runtime"
 import "core:slice"
+import "core:strings"
 
 import "vendor:glfw"
 import vk "vendor:vulkan"
@@ -944,10 +945,10 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
 
         when ODIN_OS == .Windows {
             WHITE  :: win32.FOREGROUND_RED | win32.FOREGROUND_GREEN | win32.FOREGROUND_BLUE
-            CYAN   :: win32.FOREGROUND_BLUE | win32.FOREGROUND_GREEN
-            GREEN  :: win32.FOREGROUND_GREEN | win32.FOREGROUND_INTENSITY
-            YELLOW :: win32.FOREGROUND_RED | win32.FOREGROUND_GREEN | win32.FOREGROUND_INTENSITY
-            RED    :: win32.FOREGROUND_RED | win32.FOREGROUND_INTENSITY
+            CYAN   ::                        win32.FOREGROUND_GREEN | win32.FOREGROUND_BLUE
+            GREEN  ::                        win32.FOREGROUND_GREEN                         | win32.FOREGROUND_INTENSITY
+            YELLOW :: win32.FOREGROUND_RED | win32.FOREGROUND_GREEN                         | win32.FOREGROUND_INTENSITY
+            RED    :: win32.FOREGROUND_RED                                                  | win32.FOREGROUND_INTENSITY
         }
         else {
             WHITE  :: "\x1b[0m"
@@ -957,38 +958,35 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
             RED    :: "\x1b[91m"
         }
 
-        col := WHITE
+        color := WHITE
         if options >= { .Level, .Terminal_Color } {
             switch level {
-                case .Debug:   col = CYAN
-                case .Info:    col = GREEN
-                case .Warning: col = YELLOW
+                case .Debug:   color = CYAN
+                case .Info:    color = GREEN
+                case .Warning: color = YELLOW
                 case .Error:   fallthrough
-                case .Fatal:   col = RED
+                case .Fatal:   color = RED
             }
         }
+
         log_level, ok := fmt.enum_value_to_string(level)
         if !ok { log_level = "Trace" }
 
         when ODIN_OS == .Windows {
-            win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), col)
-            format_str := fmt.tprintf("[{: 7s}] [{{: 20s}}] {}\n", log_level, text)
+            format_str := fmt.tprintf("[{: 7s}] [{{: 25s}}] {}\n", log_level, text)
         }
         else {
-            format_str := fmt.tprintf("{}[{: 7s}] [{{: 20s}}] {}{}\n", col, log_level, text, WHITE)
+            format_str := fmt.tprintf("{}[{: 7s}] [{{: 25s}}] {}{}\n", color, log_level, text, WHITE)
         }
+        loc_str := fmt.tprintf("{}:{}:{}", location.file_path, location.line, location.column)
+
+        when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), color) }
+        fmt.printf(format_str, loc_str)
+        when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE) }
 
         if level == .Fatal {
-            loc_str := fmt.tprintf("{}:{}:{}", location.file_path, location.line, location.column)
-            fmt.printf(format_str, loc_str)
-            when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE) }
             when ODIN_DEBUG { intrinsics.debug_trap() }
             else { os.exit(1) }
-        }
-        else {
-            loc_str := fmt.tprintf("{}:{}:{}", location.procedure, location.line, location.column)
-            fmt.printf(format_str, loc_str)
-            when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE) }
         }
     }
 
@@ -1018,7 +1016,17 @@ debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfo
                 return false
         }
 
-        format_str := fmt.tprintf("Validation{{}} ({}): {}", callback_data.pMessageIdName, callback_data.pMessage)
+        type_str_buf := strings.builder_make()
+        defer strings.builder_destroy(&type_str_buf)
+        for dumtf in vk.DebugUtilsMessageTypeFlagEXT {
+            if dumtf in message_type_flags {
+                fmt.sbprintf(&type_str_buf, "{}/", dumtf)
+            }
+        }
+        unordered_remove(&type_str_buf.buf, len(type_str_buf.buf) - 1)
+        type_str := strings.to_string(type_str_buf)
+
+        format_str := fmt.tprintf("{}{{}} (0x{:x}: {}):\n{}", type_str, transmute(u32) callback_data.messageIdNumber, callback_data.pMessageIdName, callback_data.pMessage)
         switch {
             case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
             case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
