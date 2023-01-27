@@ -3,6 +3,7 @@ package primordial
 import "core:intrinsics"
 import "core:fmt"
 import "core:log"
+import "core:os"
 import "core:runtime"
 import "core:slice"
 
@@ -37,7 +38,6 @@ when ODIN_DEBUG {
     }
 }
 else {
-    import "core:os"
     main :: proc() { _main() }
 }
 
@@ -418,7 +418,51 @@ _main :: proc() {
         vk.DestroyImageView(logical_device, view, nil)
     }
 
-    // @Note(Daniel): Create graphics pipeline
+    // @Note(Daniel): Create shader modules
+
+    // Vertex shader
+    vert_shader_src, read_vert_ok := os.read_entire_file("build/shader_cache/triangle.glsl.vert.spv")
+    if !read_vert_ok {
+        log.panicf("Failed to read vertex shader source!")
+    }
+    vert_shader_module_create_info := vk.ShaderModuleCreateInfo {
+        sType    = .SHADER_MODULE_CREATE_INFO,
+        codeSize = len(vert_shader_src),
+        pCode    = cast(^u32) raw_data(vert_shader_src),
+    }
+    vert_shader_module : vk.ShaderModule
+    if res := vk.CreateShaderModule(logical_device, &vert_shader_module_create_info, nil, &vert_shader_module); res != .SUCCESS {
+        log.panicf("Failed to create vertex shader module! Error: {}", res)
+    }
+    vert_shader_stage_create_info := vk.PipelineShaderStageCreateInfo {
+        sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage  = { .VERTEX },
+        module = vert_shader_module,
+        pName  = "main",
+    }
+    vk.DestroyShaderModule(logical_device, vert_shader_module, nil)
+
+    // Fragment shader
+    frag_shader_src, read_frag_ok := os.read_entire_file("build/shader_cache/triangle.glsl.frag.spv")
+    if !read_frag_ok {
+        log.panicf("Failed to read vertex shader source!")
+    }
+    frag_shader_module_create_info := vk.ShaderModuleCreateInfo {
+        sType    = .SHADER_MODULE_CREATE_INFO,
+        codeSize = len(frag_shader_src),
+        pCode    = cast(^u32) raw_data(frag_shader_src),
+    }
+    frag_shader_module : vk.ShaderModule
+    if res := vk.CreateShaderModule(logical_device, &frag_shader_module_create_info, nil, &frag_shader_module); res != .SUCCESS {
+        log.panicf("Failed to create fragment shader module! Error: {}", res)
+    }
+    frag_shader_stage_create_info := vk.PipelineShaderStageCreateInfo {
+        sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+        stage  = { .FRAGMENT },
+        module = frag_shader_module,
+        pName  = "main",
+    }
+    vk.DestroyShaderModule(logical_device, frag_shader_module, nil)
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
