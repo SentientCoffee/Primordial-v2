@@ -675,6 +675,27 @@ _main :: proc() {
     }
 
     // @Note(Daniel): Create framebuffers
+    swapchain_framebuffers := make([]vk.Framebuffer, len(swapchain_image_views))
+    for framebuffer, i in &swapchain_framebuffers {
+        framebuffer_create_info := vk.FramebufferCreateInfo {
+            sType           = .FRAMEBUFFER_CREATE_INFO,
+            renderPass      = render_pass,
+            attachmentCount = 1,
+            pAttachments    = &swapchain_image_views[i],
+            width           = swapchain_extents.width,
+            height          = swapchain_extents.height,
+            layers          = 1,
+        }
+
+        if res := vk.CreateFramebuffer(logical_device, &framebuffer_create_info, nil, &framebuffer); res != .SUCCESS {
+            log.panicf("Failed to create framebuffer #{}! Error: {}", i, res)
+        }
+        log.debugf("Created framebuffer #{} ({}x{}, {} attachments)", i, framebuffer_create_info.width, framebuffer_create_info.height, framebuffer_create_info.attachmentCount)
+    }
+    defer for framebuffer in swapchain_framebuffers {
+        vk.DestroyFramebuffer(logical_device, framebuffer, nil)
+    }
+    log.infof("Created {} swapchain framebuffers", len(swapchain_framebuffers))
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
