@@ -464,6 +464,107 @@ _main :: proc() {
     }
     vk.DestroyShaderModule(logical_device, frag_shader_module, nil)
 
+    // @Note(Daniel): Graphics pipeline fixed function config
+    // Dynamic states (can be changed at render time, not immutable)
+    dynamic_states := [?]vk.DynamicState { .VIEWPORT, .SCISSOR }
+    dynamic_state_create_info := vk.PipelineDynamicStateCreateInfo {
+        sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        dynamicStateCount = len(dynamic_states),
+        pDynamicStates    = raw_data(&dynamic_states),
+    }
+
+    // Vertex input
+    vert_input_create_info := vk.PipelineVertexInputStateCreateInfo {
+        sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        vertexBindingDescriptionCount   = 0,
+        pVertexBindingDescriptions      = nil,
+        vertexAttributeDescriptionCount = 0,
+        pVertexAttributeDescriptions    = nil,
+    }
+    input_assembly_create_info := vk.PipelineInputAssemblyStateCreateInfo {
+        sType                  = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        topology               = .TRIANGLE_LIST,
+        primitiveRestartEnable = false,
+    }
+
+    // Viewport and scissor
+    viewport := vk.Viewport {
+        x        = 0.0,
+        y        = 0.0,
+        width    = cast(f32) swapchain_extents.width,
+        height   = cast(f32) swapchain_extents.height,
+        minDepth = 0.0,
+        maxDepth = 1.0,
+    }
+    scissor := vk.Rect2D {
+        offset = { 0, 0 },
+        extent = swapchain_extents,
+    }
+    viewport_state := vk.PipelineViewportStateCreateInfo {
+        sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        viewportCount = 1,
+        scissorCount  = 1,
+    }
+
+    // Rasterizer
+    rasterization_create_info := vk.PipelineRasterizationStateCreateInfo {
+        sType                   = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        depthClampEnable        = false,
+        rasterizerDiscardEnable = false,
+        polygonMode             = .FILL,
+        lineWidth               = 1.0,
+        cullMode                = { .BACK },
+        frontFace               = .CLOCKWISE,
+        depthBiasEnable         = false,
+    }
+
+    // Multisampling
+    multisample_create_info := vk.PipelineMultisampleStateCreateInfo {
+        sType                 = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        sampleShadingEnable   = false,
+        rasterizationSamples  = { ._1 },
+        minSampleShading      = 1.0,
+        pSampleMask           = nil,
+        alphaToCoverageEnable = false,
+        alphaToOneEnable      = false,
+    }
+
+    // Per-attachement color blending
+    color_blend_attachment := vk.PipelineColorBlendAttachmentState {
+        colorWriteMask      = { .R, .G, .B, .A },
+        blendEnable         = false,
+        srcColorBlendFactor = .ONE,
+        dstColorBlendFactor = .ZERO,
+        colorBlendOp        = .ADD,
+        srcAlphaBlendFactor = .ONE,
+        dstAlphaBlendFactor = .ZERO,
+        alphaBlendOp        = .ADD,
+    }
+
+    // Global color blending
+    color_blend_global_create_info := vk.PipelineColorBlendStateCreateInfo {
+        sType           = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        logicOpEnable   = false,
+        logicOp         = .COPY,
+        attachmentCount = 1,
+        pAttachments    = &color_blend_attachment,
+        blendConstants  = { 0.0, 0.0, 0.0, 0.0 },
+    }
+
+    // Pipeline layout (uniforms)
+    pipeline_layout_create_info := vk.PipelineLayoutCreateInfo {
+        sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
+        setLayoutCount         = 0,
+        pSetLayouts            = nil,
+        pushConstantRangeCount = 0,
+        pPushConstantRanges    = nil,
+    }
+    pipeline_layout : vk.PipelineLayout
+    if res := vk.CreatePipelineLayout(logical_device, &pipeline_layout_create_info, nil, &pipeline_layout); res != .SUCCESS {
+        log.panicf("Failed to create pipeline layout! Error: {}", res)
+    }
+    defer vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
+
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents();
