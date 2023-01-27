@@ -565,6 +565,45 @@ _main :: proc() {
     }
     defer vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
 
+    // @Note(Daniel): Create render pass
+
+    // Color attachments
+    color_attachment_desc := vk.AttachmentDescription {
+        format  = swapchain_surface_format.format,
+        samples = { ._1 },
+        loadOp  = .CLEAR,
+        storeOp = .STORE,
+        stencilLoadOp = .DONT_CARE,
+        stencilStoreOp = .DONT_CARE,
+        initialLayout = .UNDEFINED,
+        finalLayout = .PRESENT_SRC_KHR,
+    }
+    color_attachment_reference := vk.AttachmentReference {
+        attachment = 0,    // Will reference the attachment at index 0 (also used by the fragment shader using `layout(location = 0)`)
+        layout     = .COLOR_ATTACHMENT_OPTIMAL,
+    }
+
+    // Subpass
+    subpass_desc := vk.SubpassDescription {
+        pipelineBindPoint    = .GRAPHICS,
+        colorAttachmentCount = 1,
+        pColorAttachments    = &color_attachment_reference,
+    }
+
+    // Final render pass
+    render_pass_create_info := vk.RenderPassCreateInfo {
+        sType           = .RENDER_PASS_CREATE_INFO,
+        attachmentCount = 1,
+        pAttachments    = &color_attachment_desc,
+        subpassCount    = 1,
+        pSubpasses      = &subpass_desc,
+    }
+    render_pass : vk.RenderPass
+    if res := vk.CreateRenderPass(logical_device, &render_pass_create_info, nil, &render_pass); res != .SUCCESS {
+        log.panicf("Failed to create render pass! Error: {}", res)
+    }
+    defer vk.DestroyRenderPass(logical_device, render_pass, nil)
+
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
         glfw.PollEvents();
