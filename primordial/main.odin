@@ -516,19 +516,6 @@ _main :: proc() {
         primitiveRestartEnable = false,
     }
 
-    // Viewport and scissor
-    viewport := vk.Viewport {
-        x        = 0.0,
-        y        = 0.0,
-        width    = cast(f32) swapchain_extents.width,
-        height   = cast(f32) swapchain_extents.height,
-        minDepth = 0.0,
-        maxDepth = 1.0,
-    }
-    scissor := vk.Rect2D {
-        offset = { 0, 0 },
-        extent = swapchain_extents,
-    }
     viewport_state_create_info := vk.PipelineViewportStateCreateInfo {
         sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         viewportCount = 1,
@@ -622,6 +609,14 @@ _main :: proc() {
         colorAttachmentCount = 1,
         pColorAttachments    = &color_attachment_reference,
     }
+    subpass_dependency := vk.SubpassDependency {
+        srcSubpass    = vk.SUBPASS_EXTERNAL,            // Defined to be the implicit subpass before the first defined subpass, where we ensure we have the image from the swapchain before we render
+        dstSubpass    = 0,                              // Subpass at index 0, defined earlier
+        srcStageMask  = { .COLOR_ATTACHMENT_OUTPUT },
+        srcAccessMask = {},
+        dstStageMask  = { .COLOR_ATTACHMENT_OUTPUT },
+        dstAccessMask = { .COLOR_ATTACHMENT_WRITE },
+    }
 
     // Final render pass
     render_pass_create_info := vk.RenderPassCreateInfo {
@@ -630,6 +625,8 @@ _main :: proc() {
         pAttachments    = &color_attachment_desc,
         subpassCount    = 1,
         pSubpasses      = &subpass_desc,
+        dependencyCount = 1,
+        pDependencies   = &subpass_dependency,
     }
     render_pass : vk.RenderPass
     if res := vk.CreateRenderPass(logical_device, &render_pass_create_info, nil, &render_pass); res != .SUCCESS {
@@ -739,11 +736,153 @@ _main :: proc() {
     }
     log.debugf("Allocated {} command buffer(s)", command_buffer_alloc_info.commandBufferCount)
 
+    // @Note(Daniel): Create synchronization objects
+    semaphore_create_info := vk.SemaphoreCreateInfo {
+        sType = .SEMAPHORE_CREATE_INFO,
+    }
+    fence_create_info := vk.FenceCreateInfo {
+        sType = .FENCE_CREATE_INFO,
+        flags = { .SIGNALED },
+    }
+    swapchain_image_available_sem, render_finished_sem : vk.Semaphore
+    in_flight_fence : vk.Fence
+    {
+        image_avail_res   := vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &swapchain_image_available_sem);
+        render_finish_res := vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &render_finished_sem);
+        in_flight_res     := vk.CreateFence(logical_device, &fence_create_info, nil, &in_flight_fence);
+        if image_avail_res != .SUCCESS || render_finish_res != .SUCCESS || in_flight_res != .SUCCESS {
+            log.error("Failed to create sync objects!")
+            log.panicf("    Image available semaphore: {} | Render finished semaphore: {} | In-flight fence: {}", image_avail_res, render_finish_res, in_flight_res)
+        }
+    }
+    defer {
+        vk.DestroySemaphore(logical_device, swapchain_image_available_sem, nil)
+        vk.DestroySemaphore(logical_device, render_finished_sem, nil)
+        vk.DestroyFence(logical_device, in_flight_fence, nil)
+    }
+    log.debug("Created sync objects")
+
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
         // @Note(Daniel): Poll input events
         glfw.PollEvents();
+
+        // @Note(Daniel): Draw frame
+
+        // Wait for previous frame to finish
+        vk.WaitForFences(
+            device     = logical_device,
+            fenceCount = 1,
+            pFences    = &in_flight_fence,
+            waitAll    = true,
+            timeout    = max(u64),
+        )
+        vk.ResetFences(logical_device, 1, &in_flight_fence)
+
+        // Acquire next swapchain image
+        current_swapchain_image_index : u32
+        if res := vk.AcquireNextImageKHR(
+            device      = logical_device,
+            swapchain   = swapchain,
+            timeout     = max(u64),
+            semaphore   = swapchain_image_available_sem,
+            fence       = /*vk.NULL_HANDLE*/{},
+            pImageIndex = &current_swapchain_image_index,
+        ); res != .SUCCESS {
+            // @Note(Daniel): Log error but don't panic
+            log.errorf("Failed to acquire next swapchain image! Error: {}", res)
+        }
+
+        // Reset and record commmand buffer
+        vk.ResetCommandBuffer(command_buffer, {})
+        {
+            // Begin recording
+            command_buffer_begin_info := vk.CommandBufferBeginInfo {
+                sType            = .COMMAND_BUFFER_BEGIN_INFO,
+                flags            = {},
+                pInheritanceInfo = nil,
+            }
+            if res := vk.BeginCommandBuffer(command_buffer, &command_buffer_begin_info); res != .SUCCESS {
+                log.panicf("Failed to begin recording command buffer! Error: {}", res)
+            }
+            defer if res := vk.EndCommandBuffer(command_buffer); res != .SUCCESS {
+                log.panicf("Failed to end recording command buffer! Error: {}", res)
+            }
+
+            // Begin render pass
+            clear_color := vk.ClearValue { color = { float32 = { 0.0, 0.0, 0.0, 1.0 } } }
+            render_pass_begin_info := vk.RenderPassBeginInfo {
+                sType           = .RENDER_PASS_BEGIN_INFO,
+                renderPass      = render_pass,
+                clearValueCount = 1,
+                pClearValues    = &clear_color,
+                framebuffer     = swapchain_framebuffers[current_swapchain_image_index],
+                renderArea      = {
+                    offset = { 0, 0 },
+                    extent = swapchain_extents,
+                },
+            }
+            vk.CmdBeginRenderPass(command_buffer, &render_pass_begin_info, .INLINE)
+            defer vk.CmdEndRenderPass(command_buffer)
+
+            // Bind the graphics pipeline
+            vk.CmdBindPipeline(command_buffer, .GRAPHICS, graphics_pipeline)
+
+            // Set viewport
+            viewport := vk.Viewport {
+                x        = 0.0,
+                y        = 0.0,
+                width    = cast(f32) swapchain_extents.width,
+                height   = cast(f32) swapchain_extents.height,
+                minDepth = 0.0,
+                maxDepth = 1.0,
+            }
+            vk.CmdSetViewport(command_buffer, 0, 1, &viewport)
+
+            // Set scissor
+            scissor := vk.Rect2D {
+                offset = { 0, 0 },
+                extent = swapchain_extents,
+            }
+            vk.CmdSetScissor(command_buffer, 0, 1, &scissor)
+
+            // Actually draw
+            vk.CmdDraw(command_buffer, 3, 1, 0, 0)
+        }
+
+        // Submit command buffer to graphics queue
+        submit_info := vk.SubmitInfo {
+            sType                = .SUBMIT_INFO,
+            commandBufferCount   = 1,
+            pCommandBuffers      = &command_buffer,
+            waitSemaphoreCount   = 1,
+            pWaitSemaphores      = &swapchain_image_available_sem,
+            signalSemaphoreCount = 1,
+            pSignalSemaphores    = &render_finished_sem,
+            pWaitDstStageMask    = &vk.PipelineStageFlags{ .COLOR_ATTACHMENT_OUTPUT },
+        }
+        if res := vk.QueueSubmit(graphics_queue, 1, &submit_info, in_flight_fence); res != .SUCCESS {
+            log.panicf("Failed to submit command buffer to graphics queue! Error: {}", res)
+        }
+
+        // Present the queue to the swapchain
+        present_info := vk.PresentInfoKHR {
+            sType              = .PRESENT_INFO_KHR,
+            waitSemaphoreCount = 1,
+            pWaitSemaphores    = &render_finished_sem,
+            swapchainCount     = 1,
+            pSwapchains        = &swapchain,
+            pImageIndices      = &current_swapchain_image_index,
+        }
+
+        if res := vk.QueuePresentKHR(presentation_queue, &present_info); res != .SUCCESS {
+            // @Note(Daniel): Log error but don't panic
+            log.errorf("Failed to present queue! Error: {}", res)
+        }
     }
+
+    // @Note(Daniel): Let the device finish before cleaning up resources
+    vk.DeviceWaitIdle(logical_device)
 }
 
 Queue_Family_Indices :: struct {
