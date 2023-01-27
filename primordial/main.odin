@@ -24,6 +24,8 @@ else            { ENABLE_VALIDATION :: false }
 when ODIN_DEBUG {
     import "core:mem"
     main :: proc() {
+        context = setup_context()
+
         track : mem.Tracking_Allocator
         mem.tracking_allocator_init(&track, context.allocator)
         context.allocator = mem.tracking_allocator(&track)
@@ -31,20 +33,21 @@ when ODIN_DEBUG {
         _main()
 
         for _, leak in track.allocation_map {
-            fmt.printf("[{}:{}:{}] Leaked {} bytes\n", leak.location.file_path, leak.location.line, leak.location.column, leak.size)
+            log.warnf("[{}:{}:{}] Leaked {} bytes", leak.location.file_path, leak.location.line, leak.location.column, leak.size)
         }
         for bad_free in track.bad_free_array {
-            fmt.printf("[{}:{}:{}] Allocation {:p} was freed badly\n", bad_free.location.file_path, bad_free.location.line, bad_free.location.column, bad_free.memory)
+            log.warnf("[{}:{}:{}] Allocation {:p} was freed badly", bad_free.location.file_path, bad_free.location.line, bad_free.location.column, bad_free.memory)
         }
     }
 }
 else {
-    main :: proc() { _main() }
+    main :: proc() {
+        context = setup_context()
+        _main()
+    }
 }
 
 _main :: proc() {
-    context = setup_context()
-
     // @Note(Daniel): Init window
     glfw.Init()
     defer glfw.Terminate()
@@ -115,9 +118,11 @@ _main :: proc() {
             }
 
             if !layer_found {
-                log.panicf("Requested validation layer \"{}\" not in available layers!\n", needed_layer)
+                log.panicf("Requested validation layer \"{}\" not in available layers!", needed_layer)
             }
         }
+
+        log.infof("Validation layers enabled")
     }
 
     // @Note(Daniel): Create Vulkan instance
@@ -146,7 +151,7 @@ _main :: proc() {
 
     instance : vk.Instance
     if res := vk.CreateInstance(&instance_create_info, nil, &instance); res != .SUCCESS {
-        log.panicf("Failed to create Vulkan instance! Error: {}\n", res)
+        log.panicf("Failed to create Vulkan instance! Error: {}", res)
     }
     defer vk.DestroyInstance(instance, nil)
     log.debug("Created new Vulkan instance")
@@ -167,7 +172,7 @@ _main :: proc() {
     // @Note(Daniel): Create window surface
     window_surface : vk.SurfaceKHR
     if res := glfw.CreateWindowSurface(instance, window, nil, &window_surface); res != .SUCCESS {
-        log.panicf("Failed to create window surface! Error: {}\n", res)
+        log.panicf("Failed to create window surface! Error: {}", res)
     }
     defer vk.DestroySurfaceKHR(instance, window_surface, nil)
     log.debug("Created window surface")
@@ -176,7 +181,7 @@ _main :: proc() {
     available_physical_device_count : u32
     vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, nil)
     if available_physical_device_count == 0 {
-        log.panicf("No physical device with Vulkan support found!\n")
+        log.panicf("No physical device with Vulkan support found!")
     }
     available_physical_devices := make([]vk.PhysicalDevice, available_physical_device_count)
     defer delete(available_physical_devices)
@@ -248,7 +253,7 @@ _main :: proc() {
         physical_device = device_candidates[0].device
     }
     else {
-        log.panicf("Failed to find a suitable GPU!\n")
+        log.panicf("Failed to find a suitable GPU!")
     }
 
     {
@@ -312,7 +317,7 @@ _main :: proc() {
 
     logical_device : vk.Device
     if res := vk.CreateDevice(physical_device, &logical_device_create_info, nil, &logical_device); res != .SUCCESS {
-        log.panicf("Failed to create logical device! Error: {}\n", res)
+        log.panicf("Failed to create logical device! Error: {}", res)
     }
     defer vk.DestroyDevice(logical_device, nil)
     log.debug("Created logical device")
@@ -385,7 +390,7 @@ _main :: proc() {
 
     swapchain : vk.SwapchainKHR
     if res := vk.CreateSwapchainKHR(logical_device, &swapchain_create_info, nil, &swapchain); res != .SUCCESS {
-        log.panicf("Failed to create swapchain! Error: {}\n", res)
+        log.panicf("Failed to create swapchain! Error: {}", res)
     }
     defer vk.DestroySwapchainKHR(logical_device, swapchain, nil)
     log.debugf("Created swapchain ({}x{})", swapchain_extents.width, swapchain_extents.height)
@@ -437,6 +442,7 @@ _main :: proc() {
 
     // Vertex shader
     vert_shader_src, read_vert_ok := os.read_entire_file(VERT_SHADER_PATH)
+    defer delete(vert_shader_src)
     if !read_vert_ok {
         log.panicf("Failed to read vertex shader source from \"{}\"!", VERT_SHADER_PATH)
     }
@@ -461,6 +467,7 @@ _main :: proc() {
 
     // Fragment shader
     frag_shader_src, read_frag_ok := os.read_entire_file(FRAG_SHADER_PATH)
+    defer delete(frag_shader_src)
     if !read_frag_ok {
         log.panicf("Failed to read fragment shader source from \"{}\"!", FRAG_SHADER_PATH)
     }
@@ -486,6 +493,7 @@ _main :: proc() {
     pipeline_shader_stages := [?]vk.PipelineShaderStageCreateInfo { vert_shader_stage_create_info, frag_shader_stage_create_info }
 
     // @Note(Daniel): Graphics pipeline fixed function state
+
     // Dynamic states (can be changed at render time, not immutable)
     dynamic_states := [?]vk.DynamicState { .VIEWPORT, .SCISSOR }
     dynamic_state_create_info := vk.PipelineDynamicStateCreateInfo {
@@ -655,11 +663,18 @@ _main :: proc() {
     }
 
     graphics_pipeline : vk.Pipeline
-    if res := vk.CreateGraphicsPipelines(logical_device, 0, 1, &graphics_pipeline_create_info, nil, &graphics_pipeline); res != .SUCCESS {
+    if res := vk.CreateGraphicsPipelines(
+        device          = logical_device,
+        pipelineCache   = /*vk.NULL_HANDLE*/{},
+        createInfoCount = 1,
+        pCreateInfos    = &graphics_pipeline_create_info,
+        pAllocator      = nil,
+        pPipelines      = &graphics_pipeline,
+    ); res != .SUCCESS {
         log.panicf("Failed to create graphics pipeline! Error: {}", res)
     }
     defer vk.DestroyPipeline(logical_device, graphics_pipeline, nil)
-    log.info("Created graphics pipeline")
+    log.debug("Created graphics pipeline")
     {
         log.debugf("    -- Shader stages: {}", len(pipeline_shader_stages))
         // @Todo(Daniel): File a bug for this?
@@ -668,14 +683,15 @@ _main :: proc() {
         // }
         log.debugf("    -- Dynamic states: {}", dynamic_states)
         log.debugf("    -- Viewports: {}, scissors: {}", viewport_state_create_info.viewportCount, viewport_state_create_info.scissorCount)
-        log.debugf("    -- Subpasses: {} ({} total attachments)", render_pass_create_info.subpassCount, render_pass_create_info.attachmentCount)
+        log.debugf("    -- Subpasses: {} ({} total attachment(s))", render_pass_create_info.subpassCount, render_pass_create_info.attachmentCount)
         for subpass, i in render_pass_create_info.pSubpasses[:render_pass_create_info.subpassCount] {
-            log.debugf("        -- {}: {} ({} color attachments)", i, subpass.pipelineBindPoint, subpass.colorAttachmentCount)
+            log.debugf("        -- {}: {} ({} color attachment(s))", i, subpass.pipelineBindPoint, subpass.colorAttachmentCount)
         }
     }
 
-    // @Note(Daniel): Create framebuffers
+    // @Note(Daniel): Create swapchain framebuffers
     swapchain_framebuffers := make([]vk.Framebuffer, len(swapchain_image_views))
+    defer delete(swapchain_framebuffers)
     for framebuffer, i in &swapchain_framebuffers {
         framebuffer_create_info := vk.FramebufferCreateInfo {
             sType           = .FRAMEBUFFER_CREATE_INFO,
@@ -690,15 +706,16 @@ _main :: proc() {
         if res := vk.CreateFramebuffer(logical_device, &framebuffer_create_info, nil, &framebuffer); res != .SUCCESS {
             log.panicf("Failed to create framebuffer #{}! Error: {}", i, res)
         }
-        log.debugf("Created framebuffer #{} ({}x{}, {} attachments)", i, framebuffer_create_info.width, framebuffer_create_info.height, framebuffer_create_info.attachmentCount)
+        log.debugf("Created framebuffer #{} ({}x{}, {} attachment(s))", i, framebuffer_create_info.width, framebuffer_create_info.height, framebuffer_create_info.attachmentCount)
     }
     defer for framebuffer in swapchain_framebuffers {
         vk.DestroyFramebuffer(logical_device, framebuffer, nil)
     }
-    log.infof("Created {} swapchain framebuffers", len(swapchain_framebuffers))
+    log.debugf("Created {} swapchain framebuffer(s)", len(swapchain_framebuffers))
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
+        // @Note(Daniel): Poll input events
         glfw.PollEvents();
     }
 }
