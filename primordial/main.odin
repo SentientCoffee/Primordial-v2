@@ -118,7 +118,7 @@ _main :: proc() {
 
     // @Note(Daniel): Create Vulkan instance
     when ENABLE_VALIDATION {
-        instance_debug_messenger_create_info := create_debug_messenger_create_info()
+        instance_debug_messenger_create_info := debug_messenger_create_info_create()
     }
 
     app_info := vk.ApplicationInfo {
@@ -150,7 +150,7 @@ _main :: proc() {
     // @Note(Daniel): Create debug messenger
     when ENABLE_VALIDATION {
         debug_messenger : vk.DebugUtilsMessengerEXT
-        debug_messenger_create_info := create_debug_messenger_create_info()
+        debug_messenger_create_info := debug_messenger_create_info_create()
         vk.CreateDebugUtilsMessengerEXT(instance, &debug_messenger_create_info, nil, &debug_messenger)
     }
     defer when ENABLE_VALIDATION {
@@ -543,8 +543,7 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
     return
 }
 
-
-create_debug_messenger_create_info :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
+debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
 
     debug_callback :: proc "system" (
         message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
