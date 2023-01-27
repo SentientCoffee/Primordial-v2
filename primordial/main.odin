@@ -440,7 +440,7 @@ _main :: proc() {
         module = vert_shader_module,
         pName  = "main",
     }
-    vk.DestroyShaderModule(logical_device, vert_shader_module, nil)
+    defer vk.DestroyShaderModule(logical_device, vert_shader_module, nil)
 
     // Fragment shader
     frag_shader_src, read_frag_ok := os.read_entire_file("build/shader_cache/triangle.glsl.frag.spv")
@@ -462,9 +462,11 @@ _main :: proc() {
         module = frag_shader_module,
         pName  = "main",
     }
-    vk.DestroyShaderModule(logical_device, frag_shader_module, nil)
+    defer vk.DestroyShaderModule(logical_device, frag_shader_module, nil)
 
-    // @Note(Daniel): Graphics pipeline fixed function config
+    pipeline_shader_stages := [?]vk.PipelineShaderStageCreateInfo { vert_shader_stage_create_info, frag_shader_stage_create_info }
+
+    // @Note(Daniel): Graphics pipeline fixed function state
     // Dynamic states (can be changed at render time, not immutable)
     dynamic_states := [?]vk.DynamicState { .VIEWPORT, .SCISSOR }
     dynamic_state_create_info := vk.PipelineDynamicStateCreateInfo {
@@ -500,14 +502,17 @@ _main :: proc() {
         offset = { 0, 0 },
         extent = swapchain_extents,
     }
-    viewport_state := vk.PipelineViewportStateCreateInfo {
+    viewport_state_create_info := vk.PipelineViewportStateCreateInfo {
         sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         viewportCount = 1,
         scissorCount  = 1,
+        // Will be set up as part of dynamic state
+        pViewports    = nil,
+        pScissors     = nil,
     }
 
     // Rasterizer
-    rasterization_create_info := vk.PipelineRasterizationStateCreateInfo {
+    rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
         sType                   = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         depthClampEnable        = false,
         rasterizerDiscardEnable = false,
@@ -519,7 +524,7 @@ _main :: proc() {
     }
 
     // Multisampling
-    multisample_create_info := vk.PipelineMultisampleStateCreateInfo {
+    multisample_state_create_info := vk.PipelineMultisampleStateCreateInfo {
         sType                 = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         sampleShadingEnable   = false,
         rasterizationSamples  = { ._1 },
@@ -530,7 +535,7 @@ _main :: proc() {
     }
 
     // Per-attachement color blending
-    color_blend_attachment := vk.PipelineColorBlendAttachmentState {
+    color_blend_attachment_state := vk.PipelineColorBlendAttachmentState {
         colorWriteMask      = { .R, .G, .B, .A },
         blendEnable         = false,
         srcColorBlendFactor = .ONE,
@@ -542,16 +547,16 @@ _main :: proc() {
     }
 
     // Global color blending
-    color_blend_global_create_info := vk.PipelineColorBlendStateCreateInfo {
+    color_blend_state_create_info := vk.PipelineColorBlendStateCreateInfo {
         sType           = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         logicOpEnable   = false,
         logicOp         = .COPY,
         attachmentCount = 1,
-        pAttachments    = &color_blend_attachment,
+        pAttachments    = &color_blend_attachment_state,
         blendConstants  = { 0.0, 0.0, 0.0, 0.0 },
     }
 
-    // Pipeline layout (uniforms)
+    // @Note(Daniel): Pipeline layout (uniforms/push constants)
     pipeline_layout_create_info := vk.PipelineLayoutCreateInfo {
         sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
         setLayoutCount         = 0,
@@ -569,14 +574,14 @@ _main :: proc() {
 
     // Color attachments
     color_attachment_desc := vk.AttachmentDescription {
-        format  = swapchain_surface_format.format,
-        samples = { ._1 },
-        loadOp  = .CLEAR,
-        storeOp = .STORE,
-        stencilLoadOp = .DONT_CARE,
+        format         = swapchain_surface_format.format,
+        samples        = { ._1 },
+        loadOp         = .CLEAR,
+        storeOp        = .STORE,
+        stencilLoadOp  = .DONT_CARE,
         stencilStoreOp = .DONT_CARE,
-        initialLayout = .UNDEFINED,
-        finalLayout = .PRESENT_SRC_KHR,
+        initialLayout  = .UNDEFINED,
+        finalLayout    = .PRESENT_SRC_KHR,
     }
     color_attachment_reference := vk.AttachmentReference {
         attachment = 0,    // Will reference the attachment at index 0 (also used by the fragment shader using `layout(location = 0)`)
@@ -603,6 +608,36 @@ _main :: proc() {
         log.panicf("Failed to create render pass! Error: {}", res)
     }
     defer vk.DestroyRenderPass(logical_device, render_pass, nil)
+
+    // @Note(Daniel): Create final graphics pipeline
+    graphics_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
+        sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
+
+        // Shader stages
+        stageCount          = cast(u32) len(pipeline_shader_stages),
+        pStages             = raw_data(&pipeline_shader_stages),
+
+        // Fixed function state
+        pDynamicState       = &dynamic_state_create_info,
+        pVertexInputState   = &vert_input_create_info,
+        pViewportState      = &viewport_state_create_info,
+        pInputAssemblyState = &input_assembly_create_info,
+        pRasterizationState = &rasterization_state_create_info,
+        pMultisampleState   = &multisample_state_create_info,
+        pColorBlendState    = &color_blend_state_create_info,
+        pDepthStencilState  = nil,
+
+        // Layout and render pass
+        layout     = pipeline_layout,
+        renderPass = render_pass,
+        subpass    = 0,
+    }
+
+    graphics_pipeline : vk.Pipeline
+    if res := vk.CreateGraphicsPipelines(logical_device, 0, 1, &graphics_pipeline_create_info, nil, &graphics_pipeline); res != .SUCCESS {
+        log.panicf("Failed to create graphics pipeline! Error: {}", res)
+    }
+    defer vk.DestroyPipeline(logical_device, graphics_pipeline, nil)
 
     // @Note(Daniel): Main loop
     for !glfw.WindowShouldClose(window) {
