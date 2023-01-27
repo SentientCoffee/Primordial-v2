@@ -1,6 +1,7 @@
 param (
-    [switch]$Debug = $false,
-    [switch]$Vet   = $false
+    [string]$Target = "all",
+    [switch]$Debug  = $false,
+    [switch]$Vet    = $false
 )
 
 $MAIN_EXE_NAME   = "primordial"
@@ -34,20 +35,32 @@ $null = New-Item -Path $BUILD_DIR -type Directory
 $message = "Building $BUILD_LABEL binaries"
 if ($Vet) { $message += " (vetted)" }
 $message += "..."
-Write-Host -ForegroundColor Blue "$message`n=========="
+Write-Host -ForegroundColor Blue "$message"
 
-Write-Host -ForegroundColor Blue "Shader compiler:"
-odin run shadercomp -out:"$BUILD_DIR\$SHADERCOMP_NAME.exe" -o:$BUILD_LEVEL $DEBUG_FLAG $VET_FLAG -microarch:native -show-timings
-if (! $?) {
-    Write-Host -ForegroundColor Red "==========`nBuild failed (shader compiler)!"
-    Exit 1
+if ($Target -eq "shadercomp" -or $Target -eq "all") {
+    Write-Host -ForegroundColor Blue "==========`nShader compiler:"
+
+    if (Test-Path -Path "build\shader_cache") {
+        Write-Host -ForegroundColor Blue "Removing existing shader cache..."
+        Remove-Item -Force -Recurse "build\shader_cache"
+    }
+
+    Write-Host -ForegroundColor Blue "Compiling new shaders..."
+    odin run shadercomp -out:"$BUILD_DIR\$SHADERCOMP_NAME.exe" -o:$BUILD_LEVEL $DEBUG_FLAG $VET_FLAG -microarch:native -show-timings
+    if (! $?) {
+        Write-Host -ForegroundColor Red "==========`nBuild failed (shader compiler)!"
+        Exit 1
+    }
 }
 
-Write-Host -ForegroundColor Blue "==========`nMain program:"
-odin build primordial -out:"$BUILD_DIR\$MAIN_EXE_NAME.exe" -o:$BUILD_LEVEL $DEBUG_FLAG $VET_FLAG -microarch:native -show-timings
-if (! $?) {
-    Write-Host -ForegroundColor Red "==========`nBuild failed (Primordial)!"
-    Exit 1
+
+if ($Target -eq "primordial" -or $Target -eq "all") {
+    Write-Host -ForegroundColor Blue "==========`nPrimordial:"
+    odin build primordial -out:"$BUILD_DIR\$MAIN_EXE_NAME.exe" -o:$BUILD_LEVEL $DEBUG_FLAG $VET_FLAG -microarch:native -show-timings
+    if (! $?) {
+        Write-Host -ForegroundColor Red "==========`nBuild failed (Primordial)!"
+        Exit 1
+    }
 }
 
 Write-Host -ForegroundColor Blue "==========`nBuild successful."

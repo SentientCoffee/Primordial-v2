@@ -56,44 +56,113 @@
     },
     "tasks": [
       {
-        "label"  : "Build debug",
-        "detail" : "Build debug binary with debug symbols",
+        "label"  : "Build all (debug)",
+        "detail" : "Build all binaries with debug symbols",
         "type"   : "shell",
         "linux": {
-          "command": "./build.sh debug",
+          "command": "./build.sh debug all",
         },
         "windows": {
-          // "command": "build.bat debug",
-          "command": "./build.ps1 -Debug",
+          "command": "./build.ps1 -Debug -Target all",
         },
         "group": {
           "isDefault": true
         }
       },
       {
-        "label"  : "Build debug (vet)",
-        "detail" : "Build vetted debug binary with debug symbols",
+        "label"  : "Build all (debug vet)",
+        "detail" : "Build vetted binaries with debug symbols",
         "type"   : "shell",
         "linux": {
-          "command": "./build.sh debug vet",
+          "command": "./build.sh debug vet all",
         },
         "windows": {
-          // "command": "build.bat debug vet",
-          "command": "./build.ps1 -Debug -Vet",
+          "command": "./build.ps1 -Debug -Vet -Target all",
         },
       },
       {
-        "label"  : "Build release",
-        "detail" : "Build release binary",
+        "label"  : "Build all (release)",
+        "detail" : "Build all release binaries (vetted by default)",
         "type"   : "shell",
         "linux": {
-          "command": "./build.sh vet",
+          "command": "./build.sh vet all",
         },
         "windows": {
-          // "command": "build.bat vet",
-          "command": "./build.ps1 -Vet",
+          "command": "./build.ps1 -Vet -Target all",
         },
-      }
+      },
+      {
+        "label"  : "Run shadercomp (debug)",
+        "detail" : "Build shadercomp with debug symbols and run it",
+        "type"   : "shell",
+        "linux": {
+          "command": "./build.sh debug shadercomp",
+        },
+        "windows": {
+          "command": "./build.ps1 -Debug -Target shadercomp",
+        },
+        "group": {
+          "isDefault": true
+        }
+      },
+      {
+        "label"  : "Run shadercomp (debug vet)",
+        "detail" : "Build shadercomp vetted binary with debug symbols and run it",
+        "type"   : "shell",
+        "linux": {
+          "command": "./build.sh debug vet shadercomp",
+        },
+        "windows": {
+          "command": "./build.ps1 -Debug -Vet -Target shadercomp",
+        },
+      },
+      {
+        "label"  : "Run shadercomp (release)",
+        "detail" : "Build and run shadercomp release binary (vetted by default)",
+        "type"   : "shell",
+        "linux": {
+          "command": "./build.sh vet shadercomp",
+        },
+        "windows": {
+          "command": "./build.ps1 -Vet -Target shadercomp",
+        },
+      },
+      {
+        "label"  : "Build primordial (debug)",
+        "detail" : "Build primordial with debug symbols",
+        "type"   : "shell",
+        "linux": {
+          "command": "./build.sh debug primordial",
+        },
+        "windows": {
+          "command": "./build.ps1 -Debug -Target primordial",
+        },
+        "group": {
+          "isDefault": true
+        }
+      },
+      {
+        "label"  : "Build primordial (debug vet)",
+        "detail" : "Build primordial vetted binary with debug symbols",
+        "type"   : "shell",
+        "linux": {
+          "command": "./build.sh debug vet primordial",
+        },
+        "windows": {
+          "command": "./build.ps1 -Debug -Vet -Target primordial",
+        },
+      },
+      {
+        "label"  : "Build primordial (release)",
+        "detail" : "Build primordial release binary (vetted by default)",
+        "type"   : "shell",
+        "linux": {
+          "command": "./build.sh vet primordial",
+        },
+        "windows": {
+          "command": "./build.ps1 -Vet -Target primordial",
+        },
+      },
     ]
   },
   "launch": {
@@ -163,9 +232,5 @@
       "/usr/lib/odin/**",
       "C:/Users/dapresas/bin/odin/**"
     ],
-
-    "[bat]": {
-      "files.trimTrailingWhitespace": false,
-    },
   },
 }
