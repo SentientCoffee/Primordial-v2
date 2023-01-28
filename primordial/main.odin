@@ -284,21 +284,25 @@ _main :: proc() {
 
     // @Note(Daniel): Create queues
     queue_family_indices  := find_queue_families(physical_device, window_surface)
-    unique_queue_families := [?]u32 {
-        queue_family_indices.graphics.?,
-        queue_family_indices.presentation.?,
-    }
 
-    queue_create_infos : [len(unique_queue_families)]vk.DeviceQueueCreateInfo
-    queue_priority : f32 = 1.0
-    for queue_family_index, i in unique_queue_families {
-        create_info := vk.DeviceQueueCreateInfo {
-            sType            = .DEVICE_QUEUE_CREATE_INFO,
-            queueFamilyIndex = queue_family_index,
-            pQueuePriorities = &queue_priority,
-            queueCount       = 1,
+    unique_queue_families := set_make(u32)
+    defer set_delete(unique_queue_families)
+    set_add(&unique_queue_families, queue_family_indices.graphics.?)
+    set_add(&unique_queue_families, queue_family_indices.presentation.?)
+
+    queue_create_infos := make([]vk.DeviceQueueCreateInfo, set_len(unique_queue_families))
+    {
+        it := set_iterator_create(unique_queue_families)
+        for queue_family_index, i in set_iterate(&it) {
+            queue_priority : f32 = 1.0
+            create_info := vk.DeviceQueueCreateInfo {
+                sType            = .DEVICE_QUEUE_CREATE_INFO,
+                queueFamilyIndex = queue_family_index,
+                pQueuePriorities = &queue_priority,
+                queueCount       = 1,
+            }
+            queue_create_infos[i] = create_info
         }
-        queue_create_infos[i] = create_info
     }
 
     // @Note(Daniel): Get device features to use
@@ -1051,11 +1055,61 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
     return
 }
 
+Set_Of :: struct(S : typeid) {
+    elems : map[S]bool,
+}
 
+set_make :: proc($S : typeid, #any_int capacity : int = 64, allocator := context.allocator, loc := #caller_location) -> (set_of : Set_Of(S)) {
+    set_of.elems = make_map(T = map[S]bool, capacity = capacity, allocator = allocator, loc = loc)
+    return
+}
+set_delete :: proc(set_of : Set_Of($S), loc := #caller_location) {
+    delete(set_of.elems, loc)
+}
 
+set_add :: proc(set_of : ^Set_Of($S), elem : S) {
+    set_of.elems[elem] = true
+}
+set_remove :: proc(set_of : Set_Of($S), elem : S) -> (deleted_elem : S) {
+    set_of.elems[elem] = false
+    deleted_elem, _ = delete_key(set_of.elems, elem)
+    return
+}
+set_contains :: proc(set_of : Set_Of($S), elem : S) -> (contains : bool) {
+    contains = elem in set_of.elems && set_of.elems[elem] == true
+    return
+}
+set_len :: proc(set_of : Set_Of($S)) -> (length : int) {
+    length = len(set_of.elems)
+    // for _ in set_of.elems {
+    //     length += 1
+    // }
+    return
+}
 
+Set_Iterator :: struct(S : typeid) {
+    index : int,
+    set_of : Set_Of(S),
+}
+set_iterator_create :: proc(set_of : Set_Of($S)) -> Set_Iterator(S) {
+    return { index = 0, set_of = set_of }
+}
+set_iterate :: proc(it : ^Set_Iterator($S)) -> (value : S, index : int, cond : bool) {
+    cond = it.index < set_len(it.set_of)
+    if !cond { return }
+
+    idx := 0
+    for elem in it.set_of.elems {
+        if idx != it.index {
+            idx += 1
+            continue
         }
 
+        value = elem
+        index = it.index
+        it.index += 1
+        break
     }
 
+    return
 }
