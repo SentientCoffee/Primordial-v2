@@ -236,7 +236,7 @@ _main :: proc() {
 
         if score != 0 {
             swapchain_available := swapchain_available_support_make(device, window_surface)
-            defer swapchain_available_support_delete(&swapchain_available)
+            defer swapchain_available_support_delete(swapchain_available)
 
             if len(swapchain_available.surface_formats) <= 0 { score = 0 }
             if len(swapchain_available.present_modes  ) <= 0 { score = 0 }
@@ -891,6 +891,51 @@ _main :: proc() {
     vk.DeviceWaitIdle(logical_device)
 }
 
+debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
+
+    debug_callback :: proc "system" (
+        message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
+        message_type_flags : vk.DebugUtilsMessageTypeFlagsEXT,
+        callback_data      : ^vk.DebugUtilsMessengerCallbackDataEXT,
+        user_data          : rawptr,
+    ) -> b32 {
+        context = setup_context()
+        switch {
+            case callback_data.messageIdNumber == 0xde3cbaf:       fallthrough
+            case callback_data.pMessageIdName == "Loader Message":
+                return false
+        }
+
+        type_str_buf := strings.builder_make()
+        defer strings.builder_destroy(&type_str_buf)
+        for dumtf in vk.DebugUtilsMessageTypeFlagEXT {
+            if dumtf in message_type_flags {
+                fmt.sbprintf(&type_str_buf, "{}/", dumtf)
+            }
+        }
+        unordered_remove(&type_str_buf.buf, len(type_str_buf.buf) - 1)
+        type_str := strings.to_string(type_str_buf)
+
+        format_str := fmt.tprintf("{}{{}} (0x{:x}: {}):\n{}", type_str, transmute(u32) callback_data.messageIdNumber, callback_data.pMessageIdName, callback_data.pMessage)
+        switch {
+            case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
+            case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
+            case:                                  log.logf(log.Level(100), format_str, "")
+        }
+
+        return false
+    }
+
+    return {
+        sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        messageSeverity = { .VERBOSE, .WARNING, .ERROR },
+        messageType     = { .GENERAL, .VALIDATION, .PERFORMANCE },
+        pfnUserCallback = debug_callback,
+        pUserData       = nil,
+    }
+}
+
+
 Queue_Family_Indices :: struct {
     graphics,
     presentation : Maybe(u32),
@@ -939,7 +984,7 @@ swapchain_available_support_make :: proc(device : vk.PhysicalDevice, surface : v
 
     return
 }
-swapchain_available_support_delete :: proc(using swapchain_available : ^Swapchain_Available_Support) {
+swapchain_available_support_delete :: proc(using swapchain_available : Swapchain_Available_Support) {
     delete(surface_formats)
     delete(present_modes)
 }
@@ -983,7 +1028,7 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
         else {
             format_str := fmt.tprintf("{}[{: 7s}] [{{: 25s}}] {}{}\n", color, log_level, text, WHITE)
         }
-        loc_str := fmt.tprintf("{}:{}:{}", location.file_path, location.line, location.column)
+        loc_str := fmt.tprintf("{}:{}:{}", location.file_path if level == .Fatal else location.procedure, location.line, location.column)
 
         when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), color) }
         fmt.printf(format_str, loc_str)
@@ -1006,46 +1051,11 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
     return
 }
 
-debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfoEXT {
 
-    debug_callback :: proc "system" (
-        message_severity   : vk.DebugUtilsMessageSeverityFlagsEXT,
-        message_type_flags : vk.DebugUtilsMessageTypeFlagsEXT,
-        callback_data      : ^vk.DebugUtilsMessengerCallbackDataEXT,
-        user_data          : rawptr,
-    ) -> b32 {
-        context = setup_context()
-        switch {
-            case callback_data.messageIdNumber == 0xde3cbaf:       fallthrough
-            case callback_data.pMessageIdName == "Loader Message":
-                return false
+
+
         }
 
-        type_str_buf := strings.builder_make()
-        defer strings.builder_destroy(&type_str_buf)
-        for dumtf in vk.DebugUtilsMessageTypeFlagEXT {
-            if dumtf in message_type_flags {
-                fmt.sbprintf(&type_str_buf, "{}/", dumtf)
-            }
-        }
-        unordered_remove(&type_str_buf.buf, len(type_str_buf.buf) - 1)
-        type_str := strings.to_string(type_str_buf)
-
-        format_str := fmt.tprintf("{}{{}} (0x{:x}: {}):\n{}", type_str, transmute(u32) callback_data.messageIdNumber, callback_data.pMessageIdName, callback_data.pMessage)
-        switch {
-            case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
-            case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
-            case:                                  log.logf(log.Level(100), format_str, "")
-        }
-
-        return false
     }
 
-    return {
-        sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        messageSeverity = { .VERBOSE, .WARNING, .ERROR },
-        messageType     = { .GENERAL, .VALIDATION, .PERFORMANCE },
-        pfnUserCallback = debug_callback,
-        pUserData       = nil,
-    }
 }
