@@ -19,6 +19,8 @@ WIDTH  :: 800
 HEIGHT :: 600
 TITLE  :: "Vulkan"
 
+MAX_FRAMES_IN_FLIGHT :: 2
+
 when ODIN_DEBUG { ENABLE_VALIDATION :: true  }
 else            { ENABLE_VALIDATION :: false }
 
@@ -729,10 +731,10 @@ _main :: proc() {
         sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
         commandPool        = command_pool,
         level              = .PRIMARY,
-        commandBufferCount = 1,
+        commandBufferCount = MAX_FRAMES_IN_FLIGHT,
     }
-    command_buffer : vk.CommandBuffer
-    if res := vk.AllocateCommandBuffers(logical_device, &command_buffer_alloc_info, &command_buffer); res != .SUCCESS {
+    command_buffers : [MAX_FRAMES_IN_FLIGHT]vk.CommandBuffer
+    if res := vk.AllocateCommandBuffers(logical_device, &command_buffer_alloc_info, raw_data(&command_buffers)); res != .SUCCESS {
         log.panicf("Failed to allocate command buffer(s)! Error: {}", res)
     }
     log.debugf("Allocated {} command buffer(s)", command_buffer_alloc_info.commandBufferCount)
@@ -745,25 +747,26 @@ _main :: proc() {
         sType = .FENCE_CREATE_INFO,
         flags = { .SIGNALED },
     }
-    swapchain_image_available_sem, render_finished_sem : vk.Semaphore
-    in_flight_fence : vk.Fence
-    {
-        image_avail_res   := vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &swapchain_image_available_sem);
-        render_finish_res := vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &render_finished_sem);
-        in_flight_res     := vk.CreateFence(logical_device, &fence_create_info, nil, &in_flight_fence);
+    swapchain_image_available_sems, render_finished_sems : [MAX_FRAMES_IN_FLIGHT]vk.Semaphore
+    in_flight_fences : [MAX_FRAMES_IN_FLIGHT]vk.Fence
+    for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+        image_avail_res   := vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &swapchain_image_available_sems[i]);
+        render_finish_res := vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &render_finished_sems[i]);
+        in_flight_res     := vk.CreateFence(logical_device, &fence_create_info, nil, &in_flight_fences[i]);
         if image_avail_res != .SUCCESS || render_finish_res != .SUCCESS || in_flight_res != .SUCCESS {
             log.error("Failed to create sync objects!")
-            log.panicf("    Image available semaphore: {} | Render finished semaphore: {} | In-flight fence: {}", image_avail_res, render_finish_res, in_flight_res)
+            log.panicf("    {}: Image available semaphore: {} | Render finished semaphore: {} | In-flight fence: {}", i, image_avail_res, render_finish_res, in_flight_res)
         }
     }
-    defer {
-        vk.DestroySemaphore(logical_device, swapchain_image_available_sem, nil)
-        vk.DestroySemaphore(logical_device, render_finished_sem, nil)
-        vk.DestroyFence(logical_device, in_flight_fence, nil)
+    defer for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
+        vk.DestroySemaphore(logical_device, swapchain_image_available_sems[i], nil)
+        vk.DestroySemaphore(logical_device, render_finished_sems[i], nil)
+        vk.DestroyFence(logical_device, in_flight_fences[i], nil)
     }
     log.debug("Created sync objects")
 
     // @Note(Daniel): Main loop
+    current_frame_index := 0
     for !glfw.WindowShouldClose(window) {
         // @Note(Daniel): Poll input events
         glfw.PollEvents();
@@ -774,11 +777,11 @@ _main :: proc() {
         vk.WaitForFences(
             device     = logical_device,
             fenceCount = 1,
-            pFences    = &in_flight_fence,
+            pFences    = &in_flight_fences[current_frame_index],
             waitAll    = true,
             timeout    = max(u64),
         )
-        vk.ResetFences(logical_device, 1, &in_flight_fence)
+        vk.ResetFences(logical_device, 1, &in_flight_fences[current_frame_index])
 
         // Acquire next swapchain image
         current_swapchain_image_index : u32
@@ -786,7 +789,7 @@ _main :: proc() {
             device      = logical_device,
             swapchain   = swapchain,
             timeout     = max(u64),
-            semaphore   = swapchain_image_available_sem,
+            semaphore   = swapchain_image_available_sems[current_frame_index],
             fence       = /*vk.NULL_HANDLE*/{},
             pImageIndex = &current_swapchain_image_index,
         ); res != .SUCCESS {
@@ -795,7 +798,7 @@ _main :: proc() {
         }
 
         // Reset and record commmand buffer
-        vk.ResetCommandBuffer(command_buffer, {})
+        vk.ResetCommandBuffer(command_buffers[current_frame_index], {})
         {
             // Begin recording
             command_buffer_begin_info := vk.CommandBufferBeginInfo {
@@ -803,10 +806,10 @@ _main :: proc() {
                 flags            = {},
                 pInheritanceInfo = nil,
             }
-            if res := vk.BeginCommandBuffer(command_buffer, &command_buffer_begin_info); res != .SUCCESS {
+            if res := vk.BeginCommandBuffer(command_buffers[current_frame_index], &command_buffer_begin_info); res != .SUCCESS {
                 log.panicf("Failed to begin recording command buffer! Error: {}", res)
             }
-            defer if res := vk.EndCommandBuffer(command_buffer); res != .SUCCESS {
+            defer if res := vk.EndCommandBuffer(command_buffers[current_frame_index]); res != .SUCCESS {
                 log.panicf("Failed to end recording command buffer! Error: {}", res)
             }
 
@@ -823,11 +826,11 @@ _main :: proc() {
                     extent = swapchain_extents,
                 },
             }
-            vk.CmdBeginRenderPass(command_buffer, &render_pass_begin_info, .INLINE)
-            defer vk.CmdEndRenderPass(command_buffer)
+            vk.CmdBeginRenderPass(command_buffers[current_frame_index], &render_pass_begin_info, .INLINE)
+            defer vk.CmdEndRenderPass(command_buffers[current_frame_index])
 
             // Bind the graphics pipeline
-            vk.CmdBindPipeline(command_buffer, .GRAPHICS, graphics_pipeline)
+            vk.CmdBindPipeline(command_buffers[current_frame_index], .GRAPHICS, graphics_pipeline)
 
             // Set viewport
             viewport := vk.Viewport {
@@ -838,31 +841,31 @@ _main :: proc() {
                 minDepth = 0.0,
                 maxDepth = 1.0,
             }
-            vk.CmdSetViewport(command_buffer, 0, 1, &viewport)
+            vk.CmdSetViewport(command_buffers[current_frame_index], 0, 1, &viewport)
 
             // Set scissor
             scissor := vk.Rect2D {
                 offset = { 0, 0 },
                 extent = swapchain_extents,
             }
-            vk.CmdSetScissor(command_buffer, 0, 1, &scissor)
+            vk.CmdSetScissor(command_buffers[current_frame_index], 0, 1, &scissor)
 
             // Actually draw
-            vk.CmdDraw(command_buffer, 3, 1, 0, 0)
+            vk.CmdDraw(command_buffers[current_frame_index], 3, 1, 0, 0)
         }
 
         // Submit command buffer to graphics queue
         submit_info := vk.SubmitInfo {
             sType                = .SUBMIT_INFO,
             commandBufferCount   = 1,
-            pCommandBuffers      = &command_buffer,
+            pCommandBuffers      = &command_buffers[current_frame_index],
             waitSemaphoreCount   = 1,
-            pWaitSemaphores      = &swapchain_image_available_sem,
+            pWaitSemaphores      = &swapchain_image_available_sems[current_frame_index],
             signalSemaphoreCount = 1,
-            pSignalSemaphores    = &render_finished_sem,
+            pSignalSemaphores    = &render_finished_sems[current_frame_index],
             pWaitDstStageMask    = &vk.PipelineStageFlags{ .COLOR_ATTACHMENT_OUTPUT },
         }
-        if res := vk.QueueSubmit(graphics_queue, 1, &submit_info, in_flight_fence); res != .SUCCESS {
+        if res := vk.QueueSubmit(graphics_queue, 1, &submit_info, in_flight_fences[current_frame_index]); res != .SUCCESS {
             log.panicf("Failed to submit command buffer to graphics queue! Error: {}", res)
         }
 
@@ -870,7 +873,7 @@ _main :: proc() {
         present_info := vk.PresentInfoKHR {
             sType              = .PRESENT_INFO_KHR,
             waitSemaphoreCount = 1,
-            pWaitSemaphores    = &render_finished_sem,
+            pWaitSemaphores    = &render_finished_sems[current_frame_index],
             swapchainCount     = 1,
             pSwapchains        = &swapchain,
             pImageIndices      = &current_swapchain_image_index,
@@ -880,6 +883,8 @@ _main :: proc() {
             // @Note(Daniel): Log error but don't panic
             log.errorf("Failed to present queue! Error: {}", res)
         }
+
+        current_frame_index = (current_frame_index + 1) % MAX_FRAMES_IN_FLIGHT
     }
 
     // @Note(Daniel): Let the device finish before cleaning up resources
