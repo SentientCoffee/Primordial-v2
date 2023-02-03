@@ -9,6 +9,10 @@
       "path": "/usr/lib/odin/vendor"
     },
     {
+      "name": "shared",
+      "path": "/usr/lib/odin/shared"
+    },
+    {
       "name": "engine",
       "path": "engine"
     },

@@ -5,6 +5,11 @@
       "path": "..",
     },
     {
+      "name": "Odin Shared",
+      "path": "C:/Users/dapresas/bin/odin/shared"
+      // "path": "/usr/lib/odin/shared"
+    },
+    {
       "name": "Odin Core",
       "path": "C:/Users/dapresas/bin/odin/core"
       // "path": "/usr/lib/odin/core"
