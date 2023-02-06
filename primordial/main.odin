@@ -1,19 +1,20 @@
 package primordial
 
-import "core:intrinsics"
+import "core:c"
 import "core:fmt"
+import "core:intrinsics"
 import "core:log"
 import "core:os"
 import "core:runtime"
 import "core:slice"
 import "core:strings"
 
-import "vendor:glfw"
-import vk "vendor:vulkan"
-
 when ODIN_OS == .Windows {
     import win32 "core:sys/windows"
 }
+
+import "vendor:glfw"
+import vk "vendor:vulkan"
 
 import "shared:set_of"
 
@@ -52,18 +53,26 @@ else {
     }
 }
 
+framebuffer_resized := false
+
 _main :: proc() {
     // @Note(Daniel): Init window
     glfw.Init()
     defer glfw.Terminate()
 
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-    glfw.WindowHint(glfw.RESIZABLE, 0)
+    glfw.WindowHint(glfw.RESIZABLE, 1)
 
     window := glfw.CreateWindow(WIDTH, HEIGHT, TITLE, nil, nil)
     defer glfw.DestroyWindow(window);
 
     log.debugf("Created window \"{}\" ({}x{})", TITLE, WIDTH, HEIGHT)
+
+    glfw.SetFramebufferSizeCallback(window, proc "c" (window : glfw.WindowHandle, width, height : c.int) {
+        // @Todo(Daniel): Don't use globals for this
+        framebuffer_resized = true
+    })
+    log.debug("Set window framebuffer size callback")
 
     // @Note(Daniel): Load Vulkan global procs
     // @Reference: https://gist.github.com/terickson001/bdaa52ce621a6c7f4120abba8959ffe6#file-main-odin-L216
@@ -672,7 +681,6 @@ _main :: proc() {
             waitAll    = true,
             timeout    = max(u64),
         )
-        vk.ResetFences(logical_device, 1, &in_flight_fences[current_frame_index])
 
         // Acquire next swapchain image
         current_swapchain_image_index : u32
@@ -683,10 +691,18 @@ _main :: proc() {
             semaphore   = swapchain_image_available_sems[current_frame_index],
             fence       = /*vk.NULL_HANDLE*/{},
             pImageIndex = &current_swapchain_image_index,
-        ); res != .SUCCESS {
-            // @Note(Daniel): Log error but don't panic
-            log.errorf("Failed to acquire next swapchain image! Error: {}", res)
+        ); res == .ERROR_OUT_OF_DATE_KHR {
+            log.info("Recreating swapchain!")
+            log.debugf("    Acquire next image result: {}", res)
+            swapchain_delete(logical_device, swapchain)
+            swapchain = swapchain_make(window, window_surface, surface_format, physical_device, logical_device, render_pass)
+            continue
         }
+        else if res != .SUCCESS && res != .SUBOPTIMAL_KHR {
+            log.panicf("Failed to acquire next swapchain image! Error: {}", res)
+        }
+
+        vk.ResetFences(logical_device, 1, &in_flight_fences[current_frame_index])
 
         // Reset and record commmand buffer
         vk.ResetCommandBuffer(command_buffers[current_frame_index], {})
@@ -770,9 +786,15 @@ _main :: proc() {
             pImageIndices      = &current_swapchain_image_index,
         }
 
-        if res := vk.QueuePresentKHR(presentation_queue, &present_info); res != .SUCCESS {
-            // @Note(Daniel): Log error but don't panic
-            log.errorf("Failed to present queue! Error: {}", res)
+        if res := vk.QueuePresentKHR(presentation_queue, &present_info); res == .ERROR_OUT_OF_DATE_KHR || res == .SUBOPTIMAL_KHR || framebuffer_resized {
+            log.info("Recreating swapchain!")
+            log.debugf("    Queue present result: {} | Framebuffer resized = {}", res, framebuffer_resized)
+            swapchain_delete(logical_device, swapchain)
+            swapchain = swapchain_make(window, window_surface, surface_format, physical_device, logical_device, render_pass)
+            framebuffer_resized = false
+        }
+        else if res != .SUCCESS {
+            log.panicf("Failed to present queue! Error: {}", res)
         }
 
         current_frame_index = (current_frame_index + 1) % MAX_FRAMES_IN_FLIGHT
@@ -859,25 +881,25 @@ Swapchain_Available_Support :: struct {
     surface_formats : []vk.SurfaceFormatKHR,
     present_modes   : []vk.PresentModeKHR,
 }
-swapchain_available_support_make :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR, allocator := context.allocator, location := #caller_location) -> (swapchain_available : Swapchain_Available_Support) {
-    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &swapchain_available.capabilities)
+swapchain_available_support_make :: proc(physical_device : vk.PhysicalDevice, surface : vk.SurfaceKHR, allocator := context.allocator, loc := #caller_location) -> (swapchain_available : Swapchain_Available_Support) {
+    vk.GetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &swapchain_available.capabilities)
 
     available_surface_format_count : u32
-    vk.GetPhysicalDeviceSurfaceFormatsKHR(device, surface, &available_surface_format_count, nil)
-    swapchain_available.surface_formats = make([]vk.SurfaceFormatKHR, available_surface_format_count, allocator, location)
-    vk.GetPhysicalDeviceSurfaceFormatsKHR(device, surface, &available_surface_format_count, raw_data(swapchain_available.surface_formats))
+    vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &available_surface_format_count, nil)
+    swapchain_available.surface_formats = make([]vk.SurfaceFormatKHR, available_surface_format_count, allocator, loc)
+    vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &available_surface_format_count, raw_data(swapchain_available.surface_formats))
 
     available_present_mode_count : u32
-    vk.GetPhysicalDeviceSurfacePresentModesKHR(device, surface, &available_present_mode_count, nil)
-    swapchain_available.present_modes = make([]vk.PresentModeKHR, available_present_mode_count, allocator, location)
+    vk.GetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &available_present_mode_count, nil)
+    swapchain_available.present_modes = make([]vk.PresentModeKHR, available_present_mode_count, allocator, loc)
 
-    vk.GetPhysicalDeviceSurfacePresentModesKHR(device, surface, &available_present_mode_count, raw_data(swapchain_available.present_modes))
+    vk.GetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &available_present_mode_count, raw_data(swapchain_available.present_modes))
 
     return
 }
-swapchain_available_support_delete :: proc(using swapchain_available : Swapchain_Available_Support) {
-    delete(surface_formats)
-    delete(present_modes)
+swapchain_available_support_delete :: proc(using swapchain_available : Swapchain_Available_Support, allocator := context.allocator, loc := #caller_location) {
+    delete(surface_formats, allocator, loc)
+    delete(present_modes, allocator, loc)
 }
 
 Swapchain :: struct {
@@ -897,6 +919,13 @@ swapchain_make :: proc(
     render_pass     : vk.RenderPass,
     allocator       := context.allocator,
 ) -> (swapchain : Swapchain) {
+    width, height := glfw.GetFramebufferSize(window)
+    for width == 0 || height == 0 {
+        width, height = glfw.GetFramebufferSize(window)
+        glfw.WaitEvents()
+    }
+
+    vk.DeviceWaitIdle(logical_device)
     swapchain.surface_format = surface_format
 
     // @Note(Daniel): Query swapchain capabilities
@@ -1026,18 +1055,19 @@ swapchain_make :: proc(
 
     return
 }
+swapchain_delete :: proc(logical_device : vk.Device, swapchain : Swapchain, allocator := context.allocator, loc := #caller_location) {
+    vk.DeviceWaitIdle(logical_device)
 
-swapchain_delete :: proc(logical_device : vk.Device, swapchain : Swapchain) {
     for framebuffer in swapchain.framebuffers {
         vk.DestroyFramebuffer(logical_device, framebuffer, nil)
     }
-    delete(swapchain.framebuffers)
+    delete(swapchain.framebuffers, allocator, loc)
 
     for view in swapchain.image_views {
         vk.DestroyImageView(logical_device, view, nil)
     }
-    delete(swapchain.image_views)
-    delete(swapchain.images)
+    delete(swapchain.image_views, allocator, loc)
+    delete(swapchain.images, allocator, loc)
     vk.DestroySwapchainKHR(logical_device, swapchain.handle, nil)
 }
 
