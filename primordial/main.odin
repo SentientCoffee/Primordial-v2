@@ -6,7 +6,6 @@ import "core:intrinsics"
 import "core:log"
 import "core:math/linalg"
 import "core:os"
-import "core:reflect"
 import "core:runtime"
 import "core:slice"
 import "core:strings"
@@ -415,12 +414,6 @@ _main :: proc() {
     }
 
     // Vertex input
-    vertices := [?]Vertex {
-        { position = {  0.0, -0.5 }, color = { 1.0, 0.0, 0.0 } },
-        { position = {  0.5,  0.5 }, color = { 0.0, 1.0, 0.0 } },
-        { position = { -0.5,  0.5 }, color = { 0.0, 0.0, 1.0 } },
-    }
-
     vert_binding_desc := vk.VertexInputBindingDescription {
         binding   = 0,
         stride    = size_of(Vertex),
@@ -655,6 +648,66 @@ _main :: proc() {
     defer vk.DestroyCommandPool(logical_device, command_pool, nil)
     log.debug("Created command pool")
 
+    // @Note(Daniel): Create vertex buffer
+    vertices := [?]Vertex {
+        { position = {  0.0, -0.5 }, color = { 1.0, 0.0, 0.0 } },
+        { position = {  0.5,  0.5 }, color = { 0.0, 1.0, 0.0 } },
+        { position = { -0.5,  0.5 }, color = { 0.0, 0.0, 1.0 } },
+    }
+
+    vertex_buffer_create_info := vk.BufferCreateInfo {
+        sType       = .BUFFER_CREATE_INFO,
+        size        = size_of(Vertex) * len(vertices),
+        usage       = { .VERTEX_BUFFER },
+        sharingMode = .EXCLUSIVE,
+    }
+    vertex_buffer : vk.Buffer
+    if res := vk.CreateBuffer(logical_device, &vertex_buffer_create_info, nil, &vertex_buffer); res != .SUCCESS {
+        log.panicf("Failed to create vertex buffer! Error: {}", res)
+    }
+    log.debugf("Created vertex buffer with {} vertices ({} bytes)", len(vertices), vertex_buffer_create_info.size)
+
+    vertex_buffer_memory_requirements : vk.MemoryRequirements
+    physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties
+    vk.GetBufferMemoryRequirements(logical_device, vertex_buffer, &vertex_buffer_memory_requirements)
+    vk.GetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties)
+
+    vertex_buffer_memory_type_index : u32
+    for t, i in physical_device_memory_properties.memoryTypes[:physical_device_memory_properties.memoryTypeCount] {
+        idx := cast(u32) i
+        is_compatible_memory_type  := (vertex_buffer_memory_requirements.memoryTypeBits & (1 << idx)) != 0
+        supports_memory_properties := t.propertyFlags >= { .HOST_VISIBLE, .HOST_COHERENT }
+        if is_compatible_memory_type && supports_memory_properties {
+            vertex_buffer_memory_type_index = idx
+            break
+        }
+    }
+
+    vertex_buffer_memory_alloc_info := vk.MemoryAllocateInfo {
+        sType = .MEMORY_ALLOCATE_INFO,
+        allocationSize = vertex_buffer_memory_requirements.size,
+        memoryTypeIndex = vertex_buffer_memory_type_index,
+    }
+    vertex_buffer_memory : vk.DeviceMemory
+    if res := vk.AllocateMemory(logical_device, &vertex_buffer_memory_alloc_info, nil, &vertex_buffer_memory); res != .SUCCESS {
+        log.panicf("Failed to allocate vertex buffer memory! Error: {}", res)
+    }
+    log.debugf("Allocated {} bytes for vertex buffer", vertex_buffer_memory_alloc_info.allocationSize)
+    vk.BindBufferMemory(logical_device, vertex_buffer, vertex_buffer_memory, 0)
+
+    defer {
+        // @Note(Daniel): Need to free the memory AFTER the vertex buffer is destroyed
+        vk.DestroyBuffer(logical_device, vertex_buffer, nil)
+        vk.FreeMemory(logical_device, vertex_buffer_memory, nil)
+    }
+
+    // @Note(Daniel): Fill the vertex buffer
+    vertex_buffer_gpu_data : rawptr
+    vk.MapMemory(logical_device, vertex_buffer_memory, 0, vertex_buffer_create_info.size, {}, &vertex_buffer_gpu_data)
+    mem.copy(vertex_buffer_gpu_data, raw_data(&vertices), cast(int) vertex_buffer_create_info.size)
+    log.debugf("Copied {} bytes to vertex buffer", vertex_buffer_create_info.size)
+    vk.UnmapMemory(logical_device, vertex_buffer_memory)
+
     // @Note(Daniel): Allocate command buffer
     command_buffer_alloc_info := vk.CommandBufferAllocateInfo {
         sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
@@ -786,8 +839,13 @@ _main :: proc() {
             }
             vk.CmdSetScissor(command_buffers[current_frame_index], 0, 1, &scissor)
 
+            // Bind vertex buffer
+            offsets := [?]vk.DeviceSize{ 0 }
+            vk.CmdBindVertexBuffers(command_buffers[current_frame_index], 0, 1, &vertex_buffer, raw_data(&offsets))
+
+
             // Actually draw
-            vk.CmdDraw(command_buffers[current_frame_index], 3, 1, 0, 0)
+            vk.CmdDraw(command_buffers[current_frame_index], len(vertices), 1, 0, 0)
         }
 
         // Submit command buffer to graphics queue
@@ -1127,11 +1185,10 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
         color := WHITE
         if options >= { .Level, .Terminal_Color } {
             switch level {
-                case .Debug:   color = CYAN
-                case .Info:    color = GREEN
-                case .Warning: color = YELLOW
-                case .Error:   fallthrough
-                case .Fatal:   color = RED
+                case .Debug:         color = CYAN
+                case .Info:          color = GREEN
+                case .Warning:       color = YELLOW
+                case .Error, .Fatal: color = RED
             }
         }
 
