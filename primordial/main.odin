@@ -4,7 +4,9 @@ import "core:c"
 import "core:fmt"
 import "core:intrinsics"
 import "core:log"
+import "core:math/linalg"
 import "core:os"
+import "core:reflect"
 import "core:runtime"
 import "core:slice"
 import "core:strings"
@@ -294,7 +296,7 @@ _main :: proc() {
     }
 
     // @Note(Daniel): Create queues
-    queue_family_indices  := find_queue_families(physical_device, window_surface)
+    queue_family_indices := find_queue_families(physical_device, window_surface)
 
     unique_queue_families := set_of.make_set_of(u32)
     defer set_of.delete_set(unique_queue_families)
@@ -413,12 +415,39 @@ _main :: proc() {
     }
 
     // Vertex input
+    vertices := [?]Vertex {
+        { position = {  0.0, -0.5 }, color = { 1.0, 0.0, 0.0 } },
+        { position = {  0.5,  0.5 }, color = { 0.0, 1.0, 0.0 } },
+        { position = { -0.5,  0.5 }, color = { 0.0, 0.0, 1.0 } },
+    }
+
+    vert_binding_desc := vk.VertexInputBindingDescription {
+        binding   = 0,
+        stride    = size_of(Vertex),
+        inputRate = .VERTEX,
+    }
+
+    vert_attribute_descs := [2]vk.VertexInputAttributeDescription {
+        {
+            binding  = 0,
+            location = 0,
+            format   = .R32G32_SFLOAT,
+            offset   = cast(u32) offset_of(Vertex, position),
+        },
+        {
+            binding  = 0,
+            location = 1,
+            format   = .R32G32B32_SFLOAT,
+            offset   = cast(u32) offset_of(Vertex, color),
+        },
+    }
+
     vert_input_create_info := vk.PipelineVertexInputStateCreateInfo {
         sType                           = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        vertexBindingDescriptionCount   = 0,
-        pVertexBindingDescriptions      = nil,
-        vertexAttributeDescriptionCount = 0,
-        pVertexAttributeDescriptions    = nil,
+        vertexBindingDescriptionCount   = 1,
+        pVertexBindingDescriptions      = &vert_binding_desc,
+        vertexAttributeDescriptionCount = len(vert_attribute_descs),
+        pVertexAttributeDescriptions    = raw_data(&vert_attribute_descs),
     }
     input_assembly_create_info := vk.PipelineInputAssemblyStateCreateInfo {
         sType                  = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -903,12 +932,12 @@ swapchain_available_support_delete :: proc(using swapchain_available : Swapchain
 }
 
 Swapchain :: struct {
-    handle : vk.SwapchainKHR,
+    handle         : vk.SwapchainKHR,
     surface_format : vk.SurfaceFormatKHR,
-    extents : vk.Extent2D,
-    images : []vk.Image,
-    image_views : []vk.ImageView,
-    framebuffers : []vk.Framebuffer,
+    extents        : vk.Extent2D,
+    images         : []vk.Image,
+    image_views    : []vk.ImageView,
+    framebuffers   : []vk.Framebuffer,
 }
 swapchain_make :: proc(
     window          : glfw.WindowHandle,
@@ -1069,6 +1098,11 @@ swapchain_delete :: proc(logical_device : vk.Device, swapchain : Swapchain, allo
     delete(swapchain.image_views, allocator, loc)
     delete(swapchain.images, allocator, loc)
     vk.DestroySwapchainKHR(logical_device, swapchain.handle, nil)
+}
+
+Vertex :: struct {
+    position : linalg.Vector2f32,
+    color    : linalg.Vector3f32,
 }
 
 setup_context :: proc "c" () -> (ctx : runtime.Context) {
