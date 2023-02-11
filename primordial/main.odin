@@ -2,7 +2,6 @@ package primordial
 
 import "core:c"
 import "core:fmt"
-import "core:intrinsics"
 import "core:log"
 import "core:math/linalg"
 import "core:os"
@@ -40,10 +39,10 @@ when ODIN_DEBUG {
         _main()
 
         for _, leak in track.allocation_map {
-            log.warnf("[{}:{}:{}] Leaked {} bytes", leak.location.file_path, leak.location.line, leak.location.column, leak.size)
+            log.warnf("Leaked {} bytes: {}:{}:{}", leak.size, leak.location.file_path, leak.location.line, leak.location.column)
         }
         for bad_free in track.bad_free_array {
-            log.warnf("[{}:{}:{}] Allocation {:p} was freed badly", bad_free.location.file_path, bad_free.location.line, bad_free.location.column, bad_free.memory)
+            log.warnf("Allocation {:p} was freed badly: {}:{}:{}", bad_free.memory, bad_free.location.file_path, bad_free.location.line, bad_free.location.column)
         }
     }
 }
@@ -57,7 +56,7 @@ else {
 framebuffer_resized := false
 
 _main :: proc() {
-    // @Note(Daniel): Init window
+    // @Note: Init window
     glfw.Init()
     defer glfw.Terminate()
 
@@ -70,17 +69,17 @@ _main :: proc() {
     log.debugf("Created window \"{}\" ({}x{})", TITLE, WIDTH, HEIGHT)
 
     glfw.SetFramebufferSizeCallback(window, proc "c" (window : glfw.WindowHandle, width, height : c.int) {
-        // @Todo(Daniel): Don't use globals for this
+        // @Todo: Don't use globals for this
         framebuffer_resized = true
     })
     log.debug("Set window framebuffer size callback")
 
-    // @Note(Daniel): Load Vulkan global procs
+    // @Note: Load Vulkan global procs
     // @Reference: https://gist.github.com/terickson001/bdaa52ce621a6c7f4120abba8959ffe6#file-main-odin-L216
     vk.load_proc_addresses_global(cast(rawptr) glfw.GetInstanceProcAddress)
     log.debug("Loaded global Vulkan proc addresses")
 
-    // @Note(Daniel): Get required instance extensions
+    // @Note: Get required instance extensions
     available_instance_extension_count : u32
     vk.EnumerateInstanceExtensionProperties(nil, &available_instance_extension_count, nil)
     available_instance_extensions := make([]vk.ExtensionProperties, available_instance_extension_count)
@@ -109,7 +108,7 @@ _main :: proc() {
     }
     defer delete(required_extensions)
 
-    // @Note(Daniel): Get validation layers
+    // @Note: Get validation layers
     when ENABLE_VALIDATION {
         validation_layers := []cstring {
             "VK_LAYER_KHRONOS_validation",
@@ -140,7 +139,7 @@ _main :: proc() {
         log.infof("Validation layers enabled")
     }
 
-    // @Note(Daniel): Create Vulkan instance
+    // @Note: Create Vulkan instance
     when ENABLE_VALIDATION {
         instance_debug_messenger_create_info := debug_messenger_create_info_create()
     }
@@ -173,7 +172,7 @@ _main :: proc() {
     vk.load_proc_addresses_instance(instance)
     log.debug("Loaded instance-specific Vulkan proc addresses")
 
-    // @Note(Daniel): Create debug messenger
+    // @Note: Create debug messenger
     when ENABLE_VALIDATION {
         debug_messenger : vk.DebugUtilsMessengerEXT
         debug_messenger_create_info := debug_messenger_create_info_create()
@@ -184,7 +183,7 @@ _main :: proc() {
         vk.DestroyDebugUtilsMessengerEXT(instance, debug_messenger, nil)
     }
 
-    // @Note(Daniel): Create window surface
+    // @Note: Create window surface
     window_surface : vk.SurfaceKHR
     if res := glfw.CreateWindowSurface(instance, window, nil, &window_surface); res != .SUCCESS {
         log.panicf("Failed to create window surface! Error: {}", res)
@@ -192,7 +191,7 @@ _main :: proc() {
     defer vk.DestroySurfaceKHR(instance, window_surface, nil)
     log.debug("Created window surface")
 
-    // @Note(Daniel): Get physical device candidates
+    // @Note: Get physical device candidates
     available_physical_device_count : u32
     vk.EnumeratePhysicalDevices(instance, &available_physical_device_count, nil)
     if available_physical_device_count == 0 {
@@ -219,7 +218,7 @@ _main :: proc() {
         // score += cast(int) device_props.limits.maxImageDimension2D
         // if !device_features.geometryShader { score = 0 }
 
-        // @Note(Daniel): Get required device extensions
+        // @Note: Get required device extensions
         available_device_extension_count : u32
         vk.EnumerateDeviceExtensionProperties(device, nil, &available_device_extension_count, nil)
         available_device_extensions := make([]vk.ExtensionProperties, available_device_extension_count)
@@ -262,7 +261,7 @@ _main :: proc() {
         less = proc(i, j : Device_Candidate) -> bool { return i.score > j.score },
     )
 
-    // @Note(Daniel): Select physical device to use
+    // @Note: Select physical device to use
     physical_device : vk.PhysicalDevice
     if device_candidates[0].score > 0 {
         physical_device = device_candidates[0].device
@@ -294,7 +293,7 @@ _main :: proc() {
         }
     }
 
-    // @Note(Daniel): Create queues
+    // @Note: Create queues
     queue_family_indices := find_queue_families(physical_device, window_surface)
 
     unique_queue_families := set_of.make_set_of(u32)
@@ -318,19 +317,19 @@ _main :: proc() {
         }
     }
 
-    // @Note(Daniel): Get device features to use
+    // @Note: Get device features to use
     physical_device_features : vk.PhysicalDeviceFeatures
 
-    // @Note(Daniel): Create logical device
+    // @Note: Create logical device
     logical_device_create_info := vk.DeviceCreateInfo {
         sType                   = .DEVICE_CREATE_INFO,
         queueCreateInfoCount    = auto_cast len(queue_create_infos),
-        pQueueCreateInfos       = raw_data(queue_create_infos[:]),
+        pQueueCreateInfos       = raw_data(queue_create_infos),
         pEnabledFeatures        = &physical_device_features,
         enabledExtensionCount   = auto_cast len(required_device_extensions),
         ppEnabledExtensionNames = raw_data(required_device_extensions),
 
-        // @Note(Daniel): Not necessary anymore, but for compatibility with older Vulkan implementations we set these anyway
+        // @Note: Not necessary anymore, but for compatibility with older Vulkan implementations we set these anyway
         enabledLayerCount       = auto_cast len(validation_layers) when ENABLE_VALIDATION else 0,
         ppEnabledLayerNames     = raw_data(validation_layers)      when ENABLE_VALIDATION else nil,
     }
@@ -342,12 +341,12 @@ _main :: proc() {
     defer vk.DestroyDevice(logical_device, nil)
     log.debug("Created logical device")
 
-    // @Note(Daniel): Retrieve queue handles
     graphics_queue, presentation_queue : vk.Queue
     vk.GetDeviceQueue(logical_device, queue_family_indices.graphics.?,     0, &graphics_queue)
     vk.GetDeviceQueue(logical_device, queue_family_indices.presentation.?, 0, &presentation_queue)
+    // @Note: Retrieve queue handles
 
-    // @Note(Daniel): Create shader modules
+    // @Note: Create shader modules
     VERT_SHADER_PATH :: "build/shader_cache/triangle.glsl/triangle.glsl.vert.spv"
     FRAG_SHADER_PATH :: "build/shader_cache/triangle.glsl/triangle.glsl.frag.spv"
 
@@ -403,7 +402,7 @@ _main :: proc() {
 
     pipeline_shader_stages := [?]vk.PipelineShaderStageCreateInfo { vert_shader_stage_create_info, frag_shader_stage_create_info }
 
-    // @Note(Daniel): Graphics pipeline fixed function state
+    // @Note: Graphics pipeline fixed function state
 
     // Dynamic states (can be changed at render time, not immutable)
     dynamic_states := [?]vk.DynamicState { .VIEWPORT, .SCISSOR }
@@ -502,7 +501,7 @@ _main :: proc() {
         blendConstants  = { 0.0, 0.0, 0.0, 0.0 },
     }
 
-    // @Note(Daniel): Pipeline layout (uniforms/push constants)
+    // @Note: Pipeline layout (uniforms/push constants)
     pipeline_layout_create_info := vk.PipelineLayoutCreateInfo {
         sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
         setLayoutCount         = 0,
@@ -517,7 +516,7 @@ _main :: proc() {
     defer vk.DestroyPipelineLayout(logical_device, pipeline_layout, nil)
     log.debug("Created pipeline layout")
 
-    // @Note(Daniel): Create render pass
+    // @Note: Create render pass
 
     // Query swapchain capabilities
     swapchain_available := swapchain_available_support_make(physical_device, window_surface)
@@ -580,11 +579,11 @@ _main :: proc() {
     defer vk.DestroyRenderPass(logical_device, render_pass, nil)
     log.debug("Created render pass")
 
-    // @Note(Daniel): Create swapchain
+    // @Note: Create swapchain
     swapchain := swapchain_make(window, window_surface, surface_format, physical_device, logical_device, render_pass)
     defer swapchain_delete(logical_device, swapchain)
 
-    // @Note(Daniel): Create final graphics pipeline
+    // @Note: Create final graphics pipeline
     graphics_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
         sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
 
@@ -623,10 +622,9 @@ _main :: proc() {
     log.debug("Created graphics pipeline")
     {
         log.debugf("    -- Shader stages: {}", len(pipeline_shader_stages))
-        // @Todo(Daniel): File a bug for this?
-        // for stage, i in graphics_pipeline_create_info.pStages[:graphics_pipeline_create_info.stageCount] {
-        //     log.debugf("        -- {}: {}", i, stage)
-        // }
+        for stage, i in graphics_pipeline_create_info.pStages[:graphics_pipeline_create_info.stageCount] {
+            log.debugf("        -- {}: {}", i, stage.stage)
+        }
         log.debugf("    -- Dynamic states: {}", dynamic_states)
         log.debugf("    -- Viewports: {}, scissors: {}", viewport_state_create_info.viewportCount, viewport_state_create_info.scissorCount)
         log.debugf("    -- Subpasses: {} ({} total attachment(s))", render_pass_create_info.subpassCount, render_pass_create_info.attachmentCount)
@@ -635,7 +633,7 @@ _main :: proc() {
         }
     }
 
-    // @Note(Daniel): Create command pool
+    // @Note: Create command pool
     command_pool_create_info := vk.CommandPoolCreateInfo {
         sType            = .COMMAND_POOL_CREATE_INFO,
         flags            = { .RESET_COMMAND_BUFFER },
@@ -648,7 +646,6 @@ _main :: proc() {
     defer vk.DestroyCommandPool(logical_device, command_pool, nil)
     log.debug("Created command pool")
 
-    // @Note(Daniel): Create vertex buffer
     vertices := [?]Vertex {
         { position = {  0.0, -0.5 }, color = { 1.0, 0.0, 0.0 } },
         { position = {  0.5,  0.5 }, color = { 0.0, 1.0, 0.0 } },
@@ -701,14 +698,14 @@ _main :: proc() {
         vk.FreeMemory(logical_device, vertex_buffer_memory, nil)
     }
 
-    // @Note(Daniel): Fill the vertex buffer
+    // @Note: Create vertex buffer
     vertex_buffer_gpu_data : rawptr
     vk.MapMemory(logical_device, vertex_buffer_memory, 0, vertex_buffer_create_info.size, {}, &vertex_buffer_gpu_data)
     mem.copy(vertex_buffer_gpu_data, raw_data(&vertices), cast(int) vertex_buffer_create_info.size)
     log.debugf("Copied {} bytes to vertex buffer", vertex_buffer_create_info.size)
     vk.UnmapMemory(logical_device, vertex_buffer_memory)
 
-    // @Note(Daniel): Allocate command buffer
+    // @Note: Allocate command buffer
     command_buffer_alloc_info := vk.CommandBufferAllocateInfo {
         sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
         commandPool        = command_pool,
@@ -721,7 +718,7 @@ _main :: proc() {
     }
     log.debugf("Allocated {} command buffer(s)", command_buffer_alloc_info.commandBufferCount)
 
-    // @Note(Daniel): Create synchronization objects
+    // @Note: Create synchronization objects
     semaphore_create_info := vk.SemaphoreCreateInfo {
         sType = .SEMAPHORE_CREATE_INFO,
     }
@@ -747,13 +744,13 @@ _main :: proc() {
     }
     log.debug("Created sync objects")
 
-    // @Note(Daniel): Main loop
+    // @Note: Main loop
     current_frame_index := 0
     for !glfw.WindowShouldClose(window) {
-        // @Note(Daniel): Poll input events
+        // @Note: Poll input events
         glfw.PollEvents();
 
-        // @Note(Daniel): Draw frame
+        // @Note: Draw frame
 
         // Wait for previous frame to finish
         vk.WaitForFences(
@@ -775,7 +772,7 @@ _main :: proc() {
             pImageIndex = &current_swapchain_image_index,
         ); res == .ERROR_OUT_OF_DATE_KHR {
             log.info("Recreating swapchain!")
-            log.debugf("    Acquire next image result: {}", res)
+            log.debugf("    -- Acquire next image result: {}", res)
             swapchain_delete(logical_device, swapchain)
             swapchain = swapchain_make(window, window_surface, surface_format, physical_device, logical_device, render_pass)
             continue
@@ -873,9 +870,9 @@ _main :: proc() {
             pImageIndices      = &current_swapchain_image_index,
         }
 
-        if res := vk.QueuePresentKHR(presentation_queue, &present_info); res == .ERROR_OUT_OF_DATE_KHR || res == .SUBOPTIMAL_KHR || framebuffer_resized {
+        if res := vk.QueuePresentKHR(present_queue, &present_info); res == .ERROR_OUT_OF_DATE_KHR || res == .SUBOPTIMAL_KHR || framebuffer_resized {
             log.info("Recreating swapchain!")
-            log.debugf("    Queue present result: {} | Framebuffer resized = {}", res, framebuffer_resized)
+            log.debugf("    -- Queue present result: {} | Framebuffer resized = {}", res, framebuffer_resized)
             swapchain_delete(logical_device, swapchain)
             swapchain = swapchain_make(window, window_surface, surface_format, physical_device, logical_device, render_pass)
             framebuffer_resized = false
@@ -887,7 +884,7 @@ _main :: proc() {
         current_frame_index = (current_frame_index + 1) % MAX_FRAMES_IN_FLIGHT
     }
 
-    // @Note(Daniel): Let the device finish before cleaning up resources
+    // @Note: Let the device finish before cleaning up resources
     vk.DeviceWaitIdle(logical_device)
 }
 
@@ -913,13 +910,14 @@ debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfo
                 fmt.sbprintf(&type_str_buf, "{}/", dumtf)
             }
         }
+        // @Note: Remove last "/"
         unordered_remove(&type_str_buf.buf, len(type_str_buf.buf) - 1)
         type_str := strings.to_string(type_str_buf)
 
         format_str := fmt.tprintf("{}{{}} (0x{:x}: {}):\n{}", type_str, transmute(u32) callback_data.messageIdNumber, callback_data.pMessageIdName, callback_data.pMessage)
         switch {
-            case message_severity >= { .ERROR }:   log.errorf(format_str, " Error")
-            case message_severity >= { .WARNING }: log.warnf(format_str, " Warning")
+            case message_severity >= { .ERROR }:   log.errorf(format_str, " ERROR")
+            case message_severity >= { .WARNING }: log.warnf(format_str, " WARNING")
             case:                                  log.logf(log.Level(100), format_str, "")
         }
 
@@ -1015,11 +1013,11 @@ swapchain_make :: proc(
     vk.DeviceWaitIdle(logical_device)
     swapchain.surface_format = surface_format
 
-    // @Note(Daniel): Query swapchain capabilities
+    // @Note: Query swapchain capabilities
     swapchain_available := swapchain_available_support_make(physical_device, window_surface, allocator)
     defer swapchain_available_support_delete(swapchain_available)
 
-    // @Note(Daniel): Choose present mode
+    // @Note: Choose present mode
     swapchain_present_mode : vk.PresentModeKHR
     for mode in swapchain_available.present_modes {
         if mode == .MAILBOX {
@@ -1083,7 +1081,7 @@ swapchain_make :: proc(
     log.debugf("    -- Image format: {}", swapchain.surface_format.format)
     log.debugf("    -- Present mode: {}", swapchain_present_mode)
 
-    // @Note(Daniel): Get swapchain images
+    // @Note: Get swapchain images
     swapchain_image_count : u32
     vk.GetSwapchainImagesKHR(logical_device, swapchain.handle, &swapchain_image_count, nil)
 
@@ -1092,7 +1090,7 @@ swapchain_make :: proc(
 
     vk.GetSwapchainImagesKHR(logical_device, swapchain.handle, &swapchain_image_count, raw_data(swapchain.images))
 
-    // @Note(Daniel): Create image views for swapchain images
+    // @Note: Create image views for swapchain images
     for image, i in swapchain.images {
         view_create_info := vk.ImageViewCreateInfo {
             sType            = .IMAGE_VIEW_CREATE_INFO,
@@ -1120,7 +1118,7 @@ swapchain_make :: proc(
     }
     log.debugf("Created {} swapchain image(s) and image view(s)", swapchain_image_count)
 
-    // @Note(Daniel): Create swapchain framebuffers
+    // @Note: Create swapchain framebuffers
     swapchain.framebuffers = make([]vk.Framebuffer, len(swapchain.image_views), allocator)
     for framebuffer, i in &swapchain.framebuffers {
         framebuffer_create_info := vk.FramebufferCreateInfo {
@@ -1165,7 +1163,7 @@ Vertex :: struct {
 
 setup_context :: proc "c" () -> (ctx : runtime.Context) {
     console_logger_proc :: proc(data : rawptr, level : log.Level, text : string, options : log.Options, location := #caller_location) {
-        // @Note(Daniel): Not using data parameter
+        // @Note: Not using data parameter
 
         when ODIN_OS == .Windows {
             WHITE  :: win32.FOREGROUND_RED | win32.FOREGROUND_GREEN | win32.FOREGROUND_BLUE
@@ -1192,23 +1190,43 @@ setup_context :: proc "c" () -> (ctx : runtime.Context) {
             }
         }
 
-        log_level, ok := fmt.enum_value_to_string(level)
-        if !ok { log_level = "Trace" }
+        builder := strings.builder_make(context.temp_allocator)
+        defer strings.builder_destroy(&builder)
 
         when ODIN_OS == .Windows {
-            format_str := fmt.tprintf("[{: 7s}] [{{: 25s}}] {}\n", log_level, text)
+            win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), color)
         }
         else {
-            format_str := fmt.tprintf("{}[{: 7s}] [{{: 25s}}] {}{}\n", color, log_level, text, WHITE)
+            fmt.sbprintf(&builder, "{}", color)
         }
-        loc_str := fmt.tprintf("{}:{}:{}", location.file_path if level == .Fatal else location.procedure, location.line, location.column)
 
-        when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), color) }
-        fmt.printf(format_str, loc_str)
-        when ODIN_OS == .Windows { win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE) }
+        {
+            log_level, ok := fmt.enum_value_to_string(level)
+            if !ok { log_level = "Trace" }
+            fmt.sbprintf(&builder, "[{:7s}] ", log_level)
+        }
+        {
+            PROC_NAME_SIZE :: 40
+            reported_location := location.file_path if level == .Fatal else location.procedure
+            loc_str := fmt.tprintf("{}:{}:{}", reported_location, location.line, location.column)
+            fmt.sbprintf(&builder, "[{: *s}] ", PROC_NAME_SIZE, loc_str)
+        }
+        {
+            fmt.sbprintf(&builder, "{}", text)
+        }
+
+        when ODIN_OS != .Windows {
+            fmt.sbprintf(&builder, "{}", WHITE)
+        }
+
+        fmt.println(strings.to_string(builder))
+
+        when ODIN_OS == .Windows {
+            win32.SetConsoleTextAttribute(win32.GetStdHandle(win32.STD_OUTPUT_HANDLE), WHITE)
+        }
 
         if level == .Fatal {
-            when ODIN_DEBUG { intrinsics.debug_trap() }
+            when ODIN_DEBUG { runtime.debug_trap() }
             else { os.exit(1) }
         }
     }
