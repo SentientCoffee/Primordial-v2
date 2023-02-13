@@ -227,8 +227,8 @@ _main :: proc() {
 
         queue_family_indices := find_queue_families(device, window_surface)
         score : int
-        if queue_family_indices.graphics     != nil { score += 1 }
-        if queue_family_indices.presentation != nil { score += 1 }
+        if queue_family_indices[.Graphics] != nil { score += 1 }
+        if queue_family_indices[.Present]  != nil { score += 1 }
 
         for needed_ext in required_device_extensions {
             ext_found := false
@@ -250,7 +250,7 @@ _main :: proc() {
             defer swapchain_available_support_delete(swapchain_available)
 
             if len(swapchain_available.surface_formats) <= 0 { score = 0 }
-            if len(swapchain_available.present_modes  ) <= 0 { score = 0 }
+            if len(swapchain_available.present_modes)   <= 0 { score = 0 }
         }
 
         append(&device_candidates, Device_Candidate { device = device, score = score })
@@ -295,16 +295,12 @@ _main :: proc() {
 
     // @Note: Create queues
     queue_family_indices := find_queue_families(physical_device, window_surface)
-
-    unique_queue_families := set_of.make_set_of(u32)
-    defer set_of.delete_set(unique_queue_families)
-    set_of.add(&unique_queue_families, queue_family_indices.graphics.?)
-    set_of.add(&unique_queue_families, queue_family_indices.presentation.?)
-
-    queue_create_infos := make([]vk.DeviceQueueCreateInfo, set_of.length(unique_queue_families))
+    unique_queue_family_indices := unique_queue_families_set_make(queue_family_indices)
+    defer unique_queue_families_set_delete(unique_queue_family_indices)
+    queue_create_infos   := make([]vk.DeviceQueueCreateInfo, set_of.length(unique_queue_family_indices))
     defer delete(queue_create_infos)
     {
-        it := set_of.iterator_create(unique_queue_families)
+        it := set_of.iterator_create(unique_queue_family_indices)
         for queue_family_index, i in set_of.iterate(&it) {
             queue_priority : f32 = 1.0
             create_info := vk.DeviceQueueCreateInfo {
@@ -341,10 +337,11 @@ _main :: proc() {
     defer vk.DestroyDevice(logical_device, nil)
     log.debug("Created logical device")
 
-    graphics_queue, presentation_queue : vk.Queue
-    vk.GetDeviceQueue(logical_device, queue_family_indices.graphics.?,     0, &graphics_queue)
-    vk.GetDeviceQueue(logical_device, queue_family_indices.presentation.?, 0, &presentation_queue)
     // @Note: Retrieve queue handles
+    graphics_queue, present_queue, transfer_queue : vk.Queue
+    vk.GetDeviceQueue(logical_device, queue_family_indices[.Graphics].?, 0, &graphics_queue)
+    vk.GetDeviceQueue(logical_device, queue_family_indices[.Present].?,  0, &present_queue)
+    vk.GetDeviceQueue(logical_device, queue_family_indices[.Transfer].?, 0, &transfer_queue)
 
     // @Note: Create shader modules
     VERT_SHADER_PATH :: "build/shader_cache/triangle.glsl/triangle.glsl.vert.spv"
@@ -933,11 +930,13 @@ debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfo
     }
 }
 
-
-Queue_Family_Indices :: struct {
-    graphics,
-    presentation : Maybe(u32),
+Queue_Family_Index_Types :: enum {
+    Graphics,
+    Present,
+    Transfer,
 }
+Queue_Family_Indices :: [Queue_Family_Index_Types]Maybe(u32)
+
 find_queue_families :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR) -> (queue_family_indices : Queue_Family_Indices) {
     available_queue_family_count : u32
     vk.GetPhysicalDeviceQueueFamilyProperties(device, &available_queue_family_count, nil)
@@ -949,16 +948,34 @@ find_queue_families :: proc(device : vk.PhysicalDevice, surface : vk.SurfaceKHR)
         present_support : b32
         vk.GetPhysicalDeviceSurfaceSupportKHR(device, auto_cast index, surface, &present_support)
         if present_support {
-            queue_family_indices.presentation = cast(u32) index
+            queue_family_indices[.Present] = cast(u32) index
         }
 
         if queue_family.queueFlags >= { .GRAPHICS } {
-            queue_family_indices.graphics = cast(u32) index
-            break
+            queue_family_indices[.Graphics] = cast(u32) index
+        }
+        else if queue_family.queueFlags >= { .TRANSFER } {
+            queue_family_indices[.Transfer] = cast(u32) index
         }
     }
 
     return
+}
+
+unique_queue_families_set_make :: proc(all : Queue_Family_Indices) -> (unique : set_of.Set_Of(u32)) {
+    unique = set_of.set_make(u32, len(Queue_Family_Index_Types))
+    for index, index_type in all {
+        if _, ok := index.?; !ok {
+            log.warnf("Found unset index type: {}", index_type)
+            continue
+        }
+        set_of.add(&unique, index.?)
+    }
+
+    return
+}
+unique_queue_families_set_delete :: proc(unique : set_of.Set_Of(u32)) {
+    set_of.set_delete(unique)
 }
 
 Swapchain_Available_Support :: struct {
@@ -1027,7 +1044,7 @@ swapchain_make :: proc(
         swapchain_present_mode = .FIFO
     }
 
-    // @Note(Daniel): Choose swap extents
+    // @Note: Choose swap extents
     if swapchain_available.capabilities.currentExtent.width != max(u32) {
         swapchain.extents = swapchain_available.capabilities.currentExtent
     }
@@ -1040,18 +1057,18 @@ swapchain_make :: proc(
         }
     }
 
-    // @Note(Daniel): Create swapchain
+    // @Note: Create swapchain
     swapchain_min_image_count := swapchain_available.capabilities.minImageCount + 1
     if swapchain_available.capabilities.maxImageCount > 0 && swapchain_min_image_count > swapchain_available.capabilities.maxImageCount {
         swapchain_min_image_count = swapchain_available.capabilities.maxImageCount
     }
 
     queue_family_indices := find_queue_families(physical_device, window_surface)
-    shared_queue_family_indices := (queue_family_indices.graphics.? == queue_family_indices.presentation.?)
-    indices := [?]u32 {
-        queue_family_indices.graphics.?,
-        queue_family_indices.presentation.?,
-    }
+    unique_queue_family_indices := unique_queue_families_set_make(queue_family_indices)
+    defer unique_queue_families_set_delete(unique_queue_family_indices)
+
+    unique := set_of.to_slice(unique_queue_family_indices)
+    shared_queue_family_indices := (set_of.length(unique_queue_family_indices) <= 1)
 
     swapchain_create_info := vk.SwapchainCreateInfoKHR {
         sType                 = .SWAPCHAIN_CREATE_INFO_KHR,
@@ -1069,9 +1086,9 @@ swapchain_make :: proc(
         clipped               = true,
         oldSwapchain          = vk.SwapchainKHR(0),
 
-        imageSharingMode      =  .CONCURRENT            if !shared_queue_family_indices else .EXCLUSIVE,
-        queueFamilyIndexCount =  auto_cast len(indices) if !shared_queue_family_indices else 0,
-        pQueueFamilyIndices   =  raw_data(&indices)     if !shared_queue_family_indices else nil,
+        imageSharingMode      = .CONCURRENT           if !shared_queue_family_indices else .EXCLUSIVE,
+        queueFamilyIndexCount = cast(u32) len(unique) if !shared_queue_family_indices else 0,
+        pQueueFamilyIndices   = raw_data(unique)      if !shared_queue_family_indices else nil,
     }
 
     if res := vk.CreateSwapchainKHR(logical_device, &swapchain_create_info, nil, &swapchain.handle); res != .SUCCESS {
