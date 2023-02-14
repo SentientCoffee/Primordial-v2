@@ -630,11 +630,139 @@ _main :: proc() {
         }
     }
 
+    vertices := [?]Vertex {
+        { position = {  0.0, -0.5 }, color = { 1.0, 0.0, 0.0 } },
+        { position = {  0.5,  0.5 }, color = { 0.0, 1.0, 0.0 } },
+        { position = { -0.5,  0.5 }, color = { 0.0, 0.0, 1.0 } },
+    }
+
+    physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties
+    vk.GetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties)
+
+    buffer_and_device_memory_make :: proc(
+        logical_device                    : vk.Device,
+        physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties,
+        buffer_size                       : u64,
+        buffer_usage                      : vk.BufferUsageFlags,
+        property_flags                    : vk.MemoryPropertyFlags,
+    ) -> (buffer : vk.Buffer, memory : vk.DeviceMemory) {
+        buffer_create_info := vk.BufferCreateInfo {
+            sType       = .BUFFER_CREATE_INFO,
+            size        = cast(vk.DeviceSize) buffer_size,
+            usage       = buffer_usage,
+            sharingMode = .EXCLUSIVE,
+        }
+        if res := vk.CreateBuffer(logical_device, &buffer_create_info, nil, &buffer); res != .SUCCESS {
+            log.panicf("Failed to create buffer with {} ({} bytes)! Error: {}", buffer_usage, buffer_size, res)
+        }
+        log.debugf("Created new buffer with {} ({} bytes)", buffer_create_info.usage, buffer_create_info.size)
+
+        buffer_memory_requirements : vk.MemoryRequirements
+        vk.GetBufferMemoryRequirements(logical_device, buffer, &buffer_memory_requirements)
+
+        buffer_memory_type_index : u32
+        memory_properties := physical_device_memory_properties
+        memory_types := memory_properties.memoryTypes[:memory_properties.memoryTypeCount]
+        for t, i in memory_types {
+            idx := cast(u32) i
+            is_compatible_memory_type  := (buffer_memory_requirements.memoryTypeBits & (1 << idx)) != 0
+            supports_memory_properties := t.propertyFlags >= property_flags
+            if is_compatible_memory_type && supports_memory_properties {
+                buffer_memory_type_index = idx
+                break
+            }
+        }
+
+        buffer_memory_alloc_info := vk.MemoryAllocateInfo {
+            sType = .MEMORY_ALLOCATE_INFO,
+            allocationSize = buffer_memory_requirements.size,
+            memoryTypeIndex = buffer_memory_type_index,
+        }
+        if res := vk.AllocateMemory(logical_device, &buffer_memory_alloc_info, nil, &memory); res != .SUCCESS {
+            log.panicf("Failed to allocate buffer memory! Error: {}", res)
+        }
+        log.debugf("Allocated {} bytes for buffer", buffer_memory_alloc_info.allocationSize)
+        vk.BindBufferMemory(logical_device, buffer, memory, 0)
+
+        return
+    }
+    buffer_and_device_memory_delete :: proc(logical_device : vk.Device, buffer : vk.Buffer, memory : vk.DeviceMemory) {
+        // @Note: Need to free the memory AFTER the buffer is destroyed
+        vk.DestroyBuffer(logical_device, buffer, nil)
+        vk.FreeMemory(logical_device, memory, nil)
+    }
+
+    // @Note: Create vertex buffer
+    vertex_buffer, vertex_buffer_memory := buffer_and_device_memory_make(logical_device, physical_device_memory_properties, size_of(vertices), vk.BufferUsageFlags{ .TRANSFER_DST, .VERTEX_BUFFER }, vk.MemoryPropertyFlags{ .DEVICE_LOCAL })
+    defer buffer_and_device_memory_delete(logical_device, vertex_buffer, vertex_buffer_memory)
+    {
+        // @Note: Create staging buffer
+        staging_buffer, staging_buffer_memory := buffer_and_device_memory_make(logical_device, physical_device_memory_properties, size_of(vertices), vk.BufferUsageFlags{ .TRANSFER_SRC }, vk.MemoryPropertyFlags{ .HOST_VISIBLE, .HOST_COHERENT })
+        defer buffer_and_device_memory_delete(logical_device, staging_buffer, staging_buffer_memory)
+
+        // @Note: Fill the staging buffer
+        staging_buffer_data : rawptr
+        vk.MapMemory(logical_device, staging_buffer_memory, 0, size_of(vertices), {}, &staging_buffer_data)
+        mem.copy(staging_buffer_data, raw_data(&vertices), size_of(vertices))
+        vk.UnmapMemory(logical_device, staging_buffer_memory)
+        log.debugf("Copied {} bytes to staging buffer", size_of(vertices))
+
+        // @Note: Copy from staging buffer to vertex buffer on the GPU
+        transfer_command_pool_create_info := vk.CommandPoolCreateInfo {
+            sType            = .COMMAND_POOL_CREATE_INFO,
+            flags            = { .RESET_COMMAND_BUFFER, .TRANSIENT },
+            queueFamilyIndex = queue_family_indices[.Transfer].?,
+        }
+        transfer_command_pool : vk.CommandPool
+        if res := vk.CreateCommandPool(logical_device, &transfer_command_pool_create_info, nil, &transfer_command_pool); res != .SUCCESS {
+            log.panicf("Failed to create transfer command pool! Error: {}", res)
+        }
+        defer vk.DestroyCommandPool(logical_device, transfer_command_pool, nil)
+        log.debug("Created transfer command pool")
+
+        transfer_command_buffer_alloc_info := vk.CommandBufferAllocateInfo {
+            sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+            commandPool        = transfer_command_pool,
+            level              = .PRIMARY,
+            commandBufferCount = 1,
+        }
+        transfer_command_buffer : vk.CommandBuffer
+        if res := vk.AllocateCommandBuffers(logical_device, &transfer_command_buffer_alloc_info, &transfer_command_buffer); res != .SUCCESS {
+            log.panicf("Failed to allocate transfer command buffer! Error: {}", res)
+        }
+        log.debug("Allocated transfer command buffer")
+
+        transfer_command_begin_info := vk.CommandBufferBeginInfo {
+            sType = .COMMAND_BUFFER_BEGIN_INFO,
+            flags = { .ONE_TIME_SUBMIT },
+        }
+
+        if res := vk.BeginCommandBuffer(transfer_command_buffer, &transfer_command_begin_info); res != .SUCCESS {
+            log.panicf("Failed to begin recording transfer command buffer! Error: {}")
+        }
+
+        buffer_copy_region := vk.BufferCopy { size = size_of(vertices) }
+        vk.CmdCopyBuffer(transfer_command_buffer, staging_buffer, vertex_buffer, 1, &buffer_copy_region)
+
+        if res := vk.EndCommandBuffer(transfer_command_buffer); res != .SUCCESS {
+            log.panicf("Failed to end recording transfer command buffer! Error: {}")
+        }
+
+        transfer_submit_info := vk.SubmitInfo {
+            sType              = .SUBMIT_INFO,
+            commandBufferCount = 1,
+            pCommandBuffers    = &transfer_command_buffer,
+        }
+
+        vk.QueueSubmit(transfer_queue, 1, &transfer_submit_info, /*vk.NULL_HANDLE*/{})
+        vk.QueueWaitIdle(transfer_queue)
+    }
+
     // @Note: Create command pool
     command_pool_create_info := vk.CommandPoolCreateInfo {
         sType            = .COMMAND_POOL_CREATE_INFO,
         flags            = { .RESET_COMMAND_BUFFER },
-        queueFamilyIndex = queue_family_indices.graphics.?,
+        queueFamilyIndex = queue_family_indices[.Graphics].?,
     }
     command_pool : vk.CommandPool
     if res := vk.CreateCommandPool(logical_device, &command_pool_create_info, nil, &command_pool); res != .SUCCESS {
@@ -642,65 +770,6 @@ _main :: proc() {
     }
     defer vk.DestroyCommandPool(logical_device, command_pool, nil)
     log.debug("Created command pool")
-
-    vertices := [?]Vertex {
-        { position = {  0.0, -0.5 }, color = { 1.0, 0.0, 0.0 } },
-        { position = {  0.5,  0.5 }, color = { 0.0, 1.0, 0.0 } },
-        { position = { -0.5,  0.5 }, color = { 0.0, 0.0, 1.0 } },
-    }
-
-    vertex_buffer_create_info := vk.BufferCreateInfo {
-        sType       = .BUFFER_CREATE_INFO,
-        size        = size_of(Vertex) * len(vertices),
-        usage       = { .VERTEX_BUFFER },
-        sharingMode = .EXCLUSIVE,
-    }
-    vertex_buffer : vk.Buffer
-    if res := vk.CreateBuffer(logical_device, &vertex_buffer_create_info, nil, &vertex_buffer); res != .SUCCESS {
-        log.panicf("Failed to create vertex buffer! Error: {}", res)
-    }
-    log.debugf("Created vertex buffer with {} vertices ({} bytes)", len(vertices), vertex_buffer_create_info.size)
-
-    vertex_buffer_memory_requirements : vk.MemoryRequirements
-    physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties
-    vk.GetBufferMemoryRequirements(logical_device, vertex_buffer, &vertex_buffer_memory_requirements)
-    vk.GetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties)
-
-    vertex_buffer_memory_type_index : u32
-    for t, i in physical_device_memory_properties.memoryTypes[:physical_device_memory_properties.memoryTypeCount] {
-        idx := cast(u32) i
-        is_compatible_memory_type  := (vertex_buffer_memory_requirements.memoryTypeBits & (1 << idx)) != 0
-        supports_memory_properties := t.propertyFlags >= { .HOST_VISIBLE, .HOST_COHERENT }
-        if is_compatible_memory_type && supports_memory_properties {
-            vertex_buffer_memory_type_index = idx
-            break
-        }
-    }
-
-    vertex_buffer_memory_alloc_info := vk.MemoryAllocateInfo {
-        sType = .MEMORY_ALLOCATE_INFO,
-        allocationSize = vertex_buffer_memory_requirements.size,
-        memoryTypeIndex = vertex_buffer_memory_type_index,
-    }
-    vertex_buffer_memory : vk.DeviceMemory
-    if res := vk.AllocateMemory(logical_device, &vertex_buffer_memory_alloc_info, nil, &vertex_buffer_memory); res != .SUCCESS {
-        log.panicf("Failed to allocate vertex buffer memory! Error: {}", res)
-    }
-    log.debugf("Allocated {} bytes for vertex buffer", vertex_buffer_memory_alloc_info.allocationSize)
-    vk.BindBufferMemory(logical_device, vertex_buffer, vertex_buffer_memory, 0)
-
-    defer {
-        // @Note(Daniel): Need to free the memory AFTER the vertex buffer is destroyed
-        vk.DestroyBuffer(logical_device, vertex_buffer, nil)
-        vk.FreeMemory(logical_device, vertex_buffer_memory, nil)
-    }
-
-    // @Note: Create vertex buffer
-    vertex_buffer_gpu_data : rawptr
-    vk.MapMemory(logical_device, vertex_buffer_memory, 0, vertex_buffer_create_info.size, {}, &vertex_buffer_gpu_data)
-    mem.copy(vertex_buffer_gpu_data, raw_data(&vertices), cast(int) vertex_buffer_create_info.size)
-    log.debugf("Copied {} bytes to vertex buffer", vertex_buffer_create_info.size)
-    vk.UnmapMemory(logical_device, vertex_buffer_memory)
 
     // @Note: Allocate command buffer
     command_buffer_alloc_info := vk.CommandBufferAllocateInfo {
