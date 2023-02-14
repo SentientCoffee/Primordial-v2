@@ -631,9 +631,14 @@ _main :: proc() {
     }
 
     vertices := [?]Vertex {
-        { position = {  0.0, -0.5 }, color = { 1.0, 0.0, 0.0 } },
-        { position = {  0.5,  0.5 }, color = { 0.0, 1.0, 0.0 } },
-        { position = { -0.5,  0.5 }, color = { 0.0, 0.0, 1.0 } },
+        { position = { -0.5, -0.5 }, color = { 1.0, 0.0, 0.0 } },
+        { position = {  0.5, -0.5 }, color = { 0.0, 1.0, 0.0 } },
+        { position = {  0.5,  0.5 }, color = { 0.0, 0.0, 1.0 } },
+        { position = { -0.5,  0.5 }, color = { 1.0, 1.0, 0.0 } },
+    }
+    indices := [?]u32 {
+        0, 1, 2,
+        0, 2, 3,
     }
 
     physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties
@@ -674,8 +679,8 @@ _main :: proc() {
         }
 
         buffer_memory_alloc_info := vk.MemoryAllocateInfo {
-            sType = .MEMORY_ALLOCATE_INFO,
-            allocationSize = buffer_memory_requirements.size,
+            sType           = .MEMORY_ALLOCATE_INFO,
+            allocationSize  = buffer_memory_requirements.size,
             memoryTypeIndex = buffer_memory_type_index,
         }
         if res := vk.AllocateMemory(logical_device, &buffer_memory_alloc_info, nil, &memory); res != .SUCCESS {
@@ -743,6 +748,72 @@ _main :: proc() {
 
         buffer_copy_region := vk.BufferCopy { size = size_of(vertices) }
         vk.CmdCopyBuffer(transfer_command_buffer, staging_buffer, vertex_buffer, 1, &buffer_copy_region)
+
+        if res := vk.EndCommandBuffer(transfer_command_buffer); res != .SUCCESS {
+            log.panicf("Failed to end recording transfer command buffer! Error: {}")
+        }
+
+        transfer_submit_info := vk.SubmitInfo {
+            sType              = .SUBMIT_INFO,
+            commandBufferCount = 1,
+            pCommandBuffers    = &transfer_command_buffer,
+        }
+
+        vk.QueueSubmit(transfer_queue, 1, &transfer_submit_info, /*vk.NULL_HANDLE*/{})
+        vk.QueueWaitIdle(transfer_queue)
+    }
+
+    // @Note: Create index buffer
+    index_buffer, index_buffer_memory := buffer_and_device_memory_make(logical_device, physical_device_memory_properties, size_of(indices), vk.BufferUsageFlags{ .TRANSFER_DST, .INDEX_BUFFER }, vk.MemoryPropertyFlags{ .DEVICE_LOCAL })
+    defer buffer_and_device_memory_delete(logical_device, index_buffer, index_buffer_memory)
+    {
+        // @Note: Create staging buffer
+        staging_buffer, staging_buffer_memory := buffer_and_device_memory_make(logical_device, physical_device_memory_properties, size_of(indices), vk.BufferUsageFlags{ .TRANSFER_SRC }, vk.MemoryPropertyFlags{ .HOST_VISIBLE, .HOST_COHERENT })
+        defer buffer_and_device_memory_delete(logical_device, staging_buffer, staging_buffer_memory)
+
+        // @Note: Fill the staging buffer
+        staging_buffer_data : rawptr
+        vk.MapMemory(logical_device, staging_buffer_memory, 0, size_of(indices), {}, &staging_buffer_data)
+        mem.copy(staging_buffer_data, raw_data(&indices), size_of(indices))
+        vk.UnmapMemory(logical_device, staging_buffer_memory)
+        log.debugf("Copied {} bytes to staging buffer", size_of(indices))
+
+        // @Note: Copy from staging buffer to vertex buffer on the GPU
+        transfer_command_pool_create_info := vk.CommandPoolCreateInfo {
+            sType            = .COMMAND_POOL_CREATE_INFO,
+            flags            = { .RESET_COMMAND_BUFFER, .TRANSIENT },
+            queueFamilyIndex = queue_family_indices[.Transfer].?,
+        }
+        transfer_command_pool : vk.CommandPool
+        if res := vk.CreateCommandPool(logical_device, &transfer_command_pool_create_info, nil, &transfer_command_pool); res != .SUCCESS {
+            log.panicf("Failed to create transfer command pool! Error: {}", res)
+        }
+        defer vk.DestroyCommandPool(logical_device, transfer_command_pool, nil)
+        log.debug("Created transfer command pool")
+
+        transfer_command_buffer_alloc_info := vk.CommandBufferAllocateInfo {
+            sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
+            commandPool        = transfer_command_pool,
+            level              = .PRIMARY,
+            commandBufferCount = 1,
+        }
+        transfer_command_buffer : vk.CommandBuffer
+        if res := vk.AllocateCommandBuffers(logical_device, &transfer_command_buffer_alloc_info, &transfer_command_buffer); res != .SUCCESS {
+            log.panicf("Failed to allocate transfer command buffer! Error: {}", res)
+        }
+        log.debug("Allocated transfer command buffer")
+
+        transfer_command_begin_info := vk.CommandBufferBeginInfo {
+            sType = .COMMAND_BUFFER_BEGIN_INFO,
+            flags = { .ONE_TIME_SUBMIT },
+        }
+
+        if res := vk.BeginCommandBuffer(transfer_command_buffer, &transfer_command_begin_info); res != .SUCCESS {
+            log.panicf("Failed to begin recording transfer command buffer! Error: {}")
+        }
+
+        buffer_copy_region := vk.BufferCopy { size = size_of(indices) }
+        vk.CmdCopyBuffer(transfer_command_buffer, staging_buffer, index_buffer, 1, &buffer_copy_region)
 
         if res := vk.EndCommandBuffer(transfer_command_buffer); res != .SUCCESS {
             log.panicf("Failed to end recording transfer command buffer! Error: {}")
@@ -905,10 +976,17 @@ _main :: proc() {
             // Bind vertex buffer
             offsets := [?]vk.DeviceSize{ 0 }
             vk.CmdBindVertexBuffers(command_buffers[current_frame_index], 0, 1, &vertex_buffer, raw_data(&offsets))
+            vk.CmdBindIndexBuffer(command_buffers[current_frame_index], index_buffer, 0, .UINT32)
 
-
-            // Actually draw
-            vk.CmdDraw(command_buffers[current_frame_index], len(vertices), 1, 0, 0)
+            // Actually draw (with indices!)
+            vk.CmdDrawIndexed(
+                commandBuffer = command_buffers[current_frame_index],
+                indexCount    = len(indices),
+                instanceCount = 1,
+                firstIndex    = 0,
+                vertexOffset  = 0,
+                firstInstance = 0,
+            )
         }
 
         // Submit command buffer to graphics queue
