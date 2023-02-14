@@ -644,59 +644,6 @@ _main :: proc() {
     physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties
     vk.GetPhysicalDeviceMemoryProperties(physical_device, &physical_device_memory_properties)
 
-    buffer_and_device_memory_make :: proc(
-        logical_device                    : vk.Device,
-        physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties,
-        buffer_size                       : u64,
-        buffer_usage                      : vk.BufferUsageFlags,
-        property_flags                    : vk.MemoryPropertyFlags,
-    ) -> (buffer : vk.Buffer, memory : vk.DeviceMemory) {
-        buffer_create_info := vk.BufferCreateInfo {
-            sType       = .BUFFER_CREATE_INFO,
-            size        = cast(vk.DeviceSize) buffer_size,
-            usage       = buffer_usage,
-            sharingMode = .EXCLUSIVE,
-        }
-        if res := vk.CreateBuffer(logical_device, &buffer_create_info, nil, &buffer); res != .SUCCESS {
-            log.panicf("Failed to create buffer with {} ({} bytes)! Error: {}", buffer_usage, buffer_size, res)
-        }
-        log.debugf("Created new buffer with {} ({} bytes)", buffer_create_info.usage, buffer_create_info.size)
-
-        buffer_memory_requirements : vk.MemoryRequirements
-        vk.GetBufferMemoryRequirements(logical_device, buffer, &buffer_memory_requirements)
-
-        buffer_memory_type_index : u32
-        memory_properties := physical_device_memory_properties
-        memory_types := memory_properties.memoryTypes[:memory_properties.memoryTypeCount]
-        for t, i in memory_types {
-            idx := cast(u32) i
-            is_compatible_memory_type  := (buffer_memory_requirements.memoryTypeBits & (1 << idx)) != 0
-            supports_memory_properties := t.propertyFlags >= property_flags
-            if is_compatible_memory_type && supports_memory_properties {
-                buffer_memory_type_index = idx
-                break
-            }
-        }
-
-        buffer_memory_alloc_info := vk.MemoryAllocateInfo {
-            sType           = .MEMORY_ALLOCATE_INFO,
-            allocationSize  = buffer_memory_requirements.size,
-            memoryTypeIndex = buffer_memory_type_index,
-        }
-        if res := vk.AllocateMemory(logical_device, &buffer_memory_alloc_info, nil, &memory); res != .SUCCESS {
-            log.panicf("Failed to allocate buffer memory! Error: {}", res)
-        }
-        log.debugf("    -- Allocated {} bytes for buffer", buffer_memory_alloc_info.allocationSize)
-        vk.BindBufferMemory(logical_device, buffer, memory, 0)
-
-        return
-    }
-    buffer_and_device_memory_delete :: proc(logical_device : vk.Device, buffer : vk.Buffer, memory : vk.DeviceMemory) {
-        // @Note: Need to free the memory AFTER the buffer is destroyed
-        vk.DestroyBuffer(logical_device, buffer, nil)
-        vk.FreeMemory(logical_device, memory, nil)
-    }
-
     // @Note: Create vertex buffer
     vertex_buffer, vertex_buffer_memory := buffer_and_device_memory_make(logical_device, physical_device_memory_properties, size_of(vertices), vk.BufferUsageFlags{ .TRANSFER_DST, .VERTEX_BUFFER }, vk.MemoryPropertyFlags{ .DEVICE_LOCAL })
     defer buffer_and_device_memory_delete(logical_device, vertex_buffer, vertex_buffer_memory)
@@ -1325,6 +1272,58 @@ swapchain_delete :: proc(logical_device : vk.Device, swapchain : Swapchain, allo
 Vertex :: struct {
     position : linalg.Vector2f32,
     color    : linalg.Vector3f32,
+}
+buffer_and_device_memory_make :: proc(
+    logical_device                    : vk.Device,
+    physical_device_memory_properties : vk.PhysicalDeviceMemoryProperties,
+    buffer_size                       : u64,
+    buffer_usage                      : vk.BufferUsageFlags,
+    property_flags                    : vk.MemoryPropertyFlags,
+) -> (buffer : vk.Buffer, memory : vk.DeviceMemory) {
+    buffer_create_info := vk.BufferCreateInfo {
+        sType       = .BUFFER_CREATE_INFO,
+        size        = cast(vk.DeviceSize) buffer_size,
+        usage       = buffer_usage,
+        sharingMode = .EXCLUSIVE,
+    }
+    if res := vk.CreateBuffer(logical_device, &buffer_create_info, nil, &buffer); res != .SUCCESS {
+        log.panicf("Failed to create buffer with {} ({} bytes)! Error: {}", buffer_usage, buffer_size, res)
+    }
+    log.debugf("Created new buffer with {} ({} bytes)", buffer_create_info.usage, buffer_create_info.size)
+
+    buffer_memory_requirements : vk.MemoryRequirements
+    vk.GetBufferMemoryRequirements(logical_device, buffer, &buffer_memory_requirements)
+
+    buffer_memory_type_index : u32
+    memory_properties := physical_device_memory_properties
+    memory_types := memory_properties.memoryTypes[:memory_properties.memoryTypeCount]
+    for t, i in memory_types {
+        idx := cast(u32) i
+        is_compatible_memory_type  := (buffer_memory_requirements.memoryTypeBits & (1 << idx)) != 0
+        supports_memory_properties := t.propertyFlags >= property_flags
+        if is_compatible_memory_type && supports_memory_properties {
+            buffer_memory_type_index = idx
+            break
+        }
+    }
+
+    buffer_memory_alloc_info := vk.MemoryAllocateInfo {
+        sType           = .MEMORY_ALLOCATE_INFO,
+        allocationSize  = buffer_memory_requirements.size,
+        memoryTypeIndex = buffer_memory_type_index,
+    }
+    if res := vk.AllocateMemory(logical_device, &buffer_memory_alloc_info, nil, &memory); res != .SUCCESS {
+        log.panicf("Failed to allocate buffer memory! Error: {}", res)
+    }
+    log.debugf("    -- Allocated {} bytes for buffer", buffer_memory_alloc_info.allocationSize)
+    vk.BindBufferMemory(logical_device, buffer, memory, 0)
+
+    return
+}
+buffer_and_device_memory_delete :: proc(logical_device : vk.Device, buffer : vk.Buffer, memory : vk.DeviceMemory) {
+    // @Note: Need to free the memory AFTER the buffer is destroyed
+    vk.DestroyBuffer(logical_device, buffer, nil)
+    vk.FreeMemory(logical_device, memory, nil)
 }
 
 setup_context :: proc "c" () -> (ctx : runtime.Context) {
