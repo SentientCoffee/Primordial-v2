@@ -686,7 +686,7 @@ _main :: proc() {
         if res := vk.AllocateMemory(logical_device, &buffer_memory_alloc_info, nil, &memory); res != .SUCCESS {
             log.panicf("Failed to allocate buffer memory! Error: {}", res)
         }
-        log.debugf("Allocated {} bytes for buffer", buffer_memory_alloc_info.allocationSize)
+        log.debugf("    -- Allocated {} bytes for buffer", buffer_memory_alloc_info.allocationSize)
         vk.BindBufferMemory(logical_device, buffer, memory, 0)
 
         return
@@ -710,7 +710,7 @@ _main :: proc() {
         vk.MapMemory(logical_device, staging_buffer_memory, 0, size_of(vertices), {}, &staging_buffer_data)
         mem.copy(staging_buffer_data, raw_data(&vertices), size_of(vertices))
         vk.UnmapMemory(logical_device, staging_buffer_memory)
-        log.debugf("Copied {} bytes to staging buffer", size_of(vertices))
+        log.debugf("Copied {} bytes to vertex staging buffer", size_of(vertices))
 
         // @Note: Copy from staging buffer to vertex buffer on the GPU
         transfer_command_pool_create_info := vk.CommandPoolCreateInfo {
@@ -748,6 +748,7 @@ _main :: proc() {
 
         buffer_copy_region := vk.BufferCopy { size = size_of(vertices) }
         vk.CmdCopyBuffer(transfer_command_buffer, staging_buffer, vertex_buffer, 1, &buffer_copy_region)
+        log.debugf("Copying {} bytes from staging buffer to vertex buffer", buffer_copy_region.size)
 
         if res := vk.EndCommandBuffer(transfer_command_buffer); res != .SUCCESS {
             log.panicf("Failed to end recording transfer command buffer! Error: {}")
@@ -776,7 +777,7 @@ _main :: proc() {
         vk.MapMemory(logical_device, staging_buffer_memory, 0, size_of(indices), {}, &staging_buffer_data)
         mem.copy(staging_buffer_data, raw_data(&indices), size_of(indices))
         vk.UnmapMemory(logical_device, staging_buffer_memory)
-        log.debugf("Copied {} bytes to staging buffer", size_of(indices))
+        log.debugf("Copied {} bytes to index staging buffer", size_of(indices))
 
         // @Note: Copy from staging buffer to vertex buffer on the GPU
         transfer_command_pool_create_info := vk.CommandPoolCreateInfo {
@@ -814,6 +815,7 @@ _main :: proc() {
 
         buffer_copy_region := vk.BufferCopy { size = size_of(indices) }
         vk.CmdCopyBuffer(transfer_command_buffer, staging_buffer, index_buffer, 1, &buffer_copy_region)
+        log.debugf("Copying {} bytes from staging buffer to index buffer", buffer_copy_region.size)
 
         if res := vk.EndCommandBuffer(transfer_command_buffer); res != .SUCCESS {
             log.panicf("Failed to end recording transfer command buffer! Error: {}")
