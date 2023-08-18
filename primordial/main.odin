@@ -552,7 +552,7 @@ _main :: proc() {
     }
     subpass_dependency := vk.SubpassDependency {
         srcSubpass    = vk.SUBPASS_EXTERNAL,            // Defined to be the implicit subpass before the first defined subpass, where we ensure we have the image from the swapchain before we render
-        dstSubpass    = 0,                              // Subpass at index 0, defined earlier
+        dstSubpass    = 0,                              // Subpass at index 0, defined when creating swapchain
         srcStageMask  = { .COLOR_ATTACHMENT_OUTPUT },
         srcAccessMask = {},
         dstStageMask  = { .COLOR_ATTACHMENT_OUTPUT },
@@ -820,7 +820,7 @@ _main :: proc() {
         in_flight_res     := vk.CreateFence(logical_device, &fence_create_info, nil, &in_flight_fences[i]);
         if image_avail_res != .SUCCESS || render_finish_res != .SUCCESS || in_flight_res != .SUCCESS {
             log.error("Failed to create sync objects!")
-            log.panicf("    {}: Image available semaphore: {} | Render finished semaphore: {} | In-flight fence: {}", i, image_avail_res, render_finish_res, in_flight_res)
+            log.panicf("    -- {}: Image available semaphore: {} | Render finished semaphore: {} | In-flight fence: {}", i, image_avail_res, render_finish_res, in_flight_res)
         }
     }
     defer for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
@@ -1004,7 +1004,7 @@ debug_messenger_create_info_create :: proc() -> vk.DebugUtilsMessengerCreateInfo
             }
         }
         // @Note: Remove last "/"
-        unordered_remove(&type_str_buf.buf, len(type_str_buf.buf) - 1)
+        pop(&type_str_buf.buf)
         type_str := strings.to_string(type_str_buf)
 
         format_str := fmt.tprintf("{}{{}} (0x{:x}: {}):\n{}", type_str, transmute(u32) callback_data.messageIdNumber, callback_data.pMessageIdName, callback_data.pMessage)
@@ -1117,6 +1117,8 @@ swapchain_make :: proc(
     render_pass     : vk.RenderPass,
     allocator       := context.allocator,
 ) -> (swapchain : Swapchain) {
+    context.allocator = allocator
+
     width, height := glfw.GetFramebufferSize(window)
     for width == 0 || height == 0 {
         width, height = glfw.GetFramebufferSize(window)
@@ -1127,7 +1129,7 @@ swapchain_make :: proc(
     swapchain.surface_format = surface_format
 
     // @Note: Query swapchain capabilities
-    swapchain_available := swapchain_available_support_make(physical_device, window_surface, allocator)
+    swapchain_available := swapchain_available_support_make(physical_device, window_surface)
     defer swapchain_available_support_delete(swapchain_available)
 
     // @Note: Choose present mode
@@ -1198,8 +1200,8 @@ swapchain_make :: proc(
     swapchain_image_count : u32
     vk.GetSwapchainImagesKHR(logical_device, swapchain.handle, &swapchain_image_count, nil)
 
-    swapchain.images      = make([]vk.Image,     swapchain_image_count, allocator)
-    swapchain.image_views = make([]vk.ImageView, swapchain_image_count, allocator)
+    swapchain.images      = make([]vk.Image,     swapchain_image_count)
+    swapchain.image_views = make([]vk.ImageView, swapchain_image_count)
 
     vk.GetSwapchainImagesKHR(logical_device, swapchain.handle, &swapchain_image_count, raw_data(swapchain.images))
 
@@ -1232,7 +1234,7 @@ swapchain_make :: proc(
     log.debugf("Created {} swapchain image(s) and image view(s)", swapchain_image_count)
 
     // @Note: Create swapchain framebuffers
-    swapchain.framebuffers = make([]vk.Framebuffer, len(swapchain.image_views), allocator)
+    swapchain.framebuffers = make([]vk.Framebuffer, len(swapchain.image_views))
     for framebuffer, i in &swapchain.framebuffers {
         framebuffer_create_info := vk.FramebufferCreateInfo {
             sType           = .FRAMEBUFFER_CREATE_INFO,
