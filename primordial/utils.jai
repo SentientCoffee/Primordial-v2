@@ -58,6 +58,12 @@ range :: ($lower : T, $upper : $T) -> [upper - lower]T #expand {
 
 // -------------------------------------------------------
 
+image_load :: (path : string, required_channels : s32 = 4) -> *u8 #must, u32, u32, s32 {
+    width, height, channels : s32;
+    pixels := stbi_load(path.data, *width, *height, *channels, cast(s32) required_channels);
+    return pixels, cast(u32) width, cast(u32) height, channels;
+}
+
 string_builder_make :: inline () -> String_Builder {
     b : String_Builder;
     init_string_builder(*b);

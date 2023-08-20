@@ -8,7 +8,7 @@ setup_context :: (highest_logger_level := Logger_Level.Info, logger_flags := Log
 }
 
 set_highest_logger_level :: inline (level : Logger_Level) {
-    if level >= .Info       then context.log_level = .NORMAL;
+    if      level >= .Info  then context.log_level = .NORMAL;
     else if level >= .Debug then context.log_level = .VERBOSE;
     else                         context.log_level = .VERY_VERBOSE;
 
@@ -110,6 +110,21 @@ log_fatal :: (fmt : string, args : ..Any, loc := #caller_location, section := Lo
 
 // -------------------------------------------------------
 
+log_indent :: () {
+    indent_level += 1;
+}
+
+log_unindent :: () {
+    indent_level = max(0, indent_level - 1);
+}
+
+log_indent_scope :: () #expand {
+    log_indent();
+    `defer log_unindent();
+}
+
+// -------------------------------------------------------
+
 vk_debug_callback :: (
     message_severity   : Vk.DebugUtilsMessageSeverityFlagsEXT,
     message_type_flags : Vk.DebugUtilsMessageTypeFlagsEXT,
@@ -147,7 +162,11 @@ Logger_Data :: struct {
     proc_name : string;
 }
 
-largest_proc_name_size   := 0;
+indent       := "|";
+indent_level := 0;
+
+// @Note: Kind of arbitrary?
+largest_reported_location_count := 25;
 largest_section_name_count :: #run -> s64 {
     level_names   := enum_names(Logger_Level);
     section_names := enum_names(Logger_Section);
@@ -187,22 +206,25 @@ console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
         else if info.common_flags & .WARNING              then section_name = "External Warning";
         else                                                   section_name = "External Log";
 
-        // if largest_section_name_count < section_name.count then largest_section_name_count = section_name.count;
-
-        string_builder_append(*builder, "[");
+        string_builder_append(*builder, #char "[");
         to_append := largest_section_name_count - section_name.count;
         for 1..to_append  string_builder_append(*builder, " ");
         string_builder_print(*builder, "%]", section_name);
     }
 
     {
-        reported_location := data.proc_name;
-        if (flags & .Level) && (data.level == .Fatal) || !reported_location {
-            reported_location = info.location.fully_pathed_filename;
+        reported_proc := data.proc_name;
+        if (flags & .Level) && (data.level == .Fatal) || !reported_proc {
+            reported_proc = info.location.fully_pathed_filename;
         }
 
+        reported_location := tprint("%:%:%", reported_proc, info.location.line_number, info.location.character_number);
+        if largest_reported_location_count < reported_location.count then largest_reported_location_count = reported_location.count;
+
         string_builder_append(*builder, #char "[");
-        string_builder_print(*builder, "%:%:%] ", reported_location, info.location.line_number, info.location.character_number);
+        to_append := largest_reported_location_count - reported_location.count;
+        for 1..to_append  string_builder_append(*builder, " ");
+        string_builder_print(*builder, "%] ", reported_location);
     }
 
     if flags & .Terminal_Color {
@@ -230,11 +252,17 @@ console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
             with_console_color(color, write_strings(message, "\n"));
         }
         else {
+            for 1..indent_level {
+                write_strings(indent, " ");
+            }
             write_strings(message, "\n");
         }
     }
     else {
         write_builder(*builder);
+        for 1..indent_level {
+            write_strings(indent, " ");
+        }
         write_strings(message, "\n");
     }
 
@@ -257,7 +285,7 @@ assert_proc :: (loc : Source_Code_Location, message : string) {
         defer node = node.next;
 
         if node.call_depth > context.stack_trace.call_depth - 2 then continue;  // @Note: Skip `assert_proc` and `assert`
-        if node.call_depth == 0 then continue;                                  // @Note: Skip unknown proc before `main`
+        if node.call_depth == 0 then break;                                     // @Note: Skip unknown proc before `main`
 
         proc_name := "<unknown>";
         file_name := "<unknown file>";
@@ -278,7 +306,7 @@ assert_proc :: (loc : Source_Code_Location, message : string) {
         defer node = node.next;
 
         if node.call_depth > context.stack_trace.call_depth - 2 then continue;  // @Note: Skip `assert_proc` and `assert`
-        if node.call_depth == 0 then continue;                                  // @Note: Skip unknown proc before `main`
+        if node.call_depth == 0 then break;                                     // @Note: Skip unknown proc before `main`
 
         proc_name := "<unknown>";
         file_name := "<unknown file>";
