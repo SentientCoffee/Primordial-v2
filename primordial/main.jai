@@ -1,48 +1,25 @@
-/* TODO:
- * - [x] Logging system
- *   - [x] Implement debug callback with logging system
- * - [x] Deal with resizes
- * - [ ] Check result values of Vk calls
- * - [ ] Test on Linux?
- *   - [ ] Generate linux vk bindings
- *   - [ ] Platform layer code
- * - [ ] Better physical device selection
- * - [ ] Better assert proc (Stop relying on Debug module)
- */
+// TODO:
+// - [ ] Test on Linux?
+//   - [ ] Generate linux vk bindings
+//   - [ ] Platform layer code
+// - [ ] Check result values of Vk calls
+// - [ ] Better physical device selection
+// - [ ] Better assert proc (Stop relying on Debug module)
+//
 
-WIDTH  :: 800;
-HEIGHT :: 600;
-TITLE  :: "Vulkan";
+// -------------------------------------------------------
 
-MAX_FRAMES_IN_FLIGHT :: 2;
+window_width  := 800;
+window_height := 600;
+window_title  := "Vulkan";
+
+// -------------------------------------------------------
 
 Vertex :: struct {
     position : Vector3;
     color    : Vector3;
+    uv       : Vector2;
 }
-
-VERTICES :: Vertex.[
-    .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 0.8, 0.2, 0.3 } },
-    .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 0.8, 0.2, 0.3 } },
-    .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 0.2, 0.8, 0.3 } },
-    .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 0.2, 0.8, 0.3 } },
-    .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 0.2, 0.3, 0.8 } },
-    .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 0.2, 0.3, 0.8 } },
-    .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 0.8, 0.7, 0.3 } },
-    .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 0.8, 0.7, 0.3 } },
-];
-
-VERTICES_SIZE :: size_of(type_of(VERTICES));
-
-INDICES :: u32.[
-    5, 7, 6, 6, 4, 5,
-    7, 5, 3, 3, 1, 7,
-    0, 1, 7, 7, 6, 0,
-    1, 0, 2, 2, 3, 1,
-    5, 3, 2, 2, 4, 5,
-    4, 2, 0, 0, 6, 4,
-];
-INDICES_SIZE :: size_of(type_of(INDICES));
 
 Matrix_Uniforms :: struct {
     model := Matrix4_Identity #align 16;
@@ -50,13 +27,50 @@ Matrix_Uniforms :: struct {
     proj  := Matrix4_Identity #align 16;
 }
 
+// -------------------------------------------------------
+
+// VERTICES :: Vertex.[
+//     .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 0.8, 0.2, 0.3 } },
+//     .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 0.8, 0.2, 0.3 } },
+//     .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 0.2, 0.8, 0.3 } },
+//     .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 0.2, 0.8, 0.3 } },
+//     .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 0.2, 0.3, 0.8 } },
+//     .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 0.2, 0.3, 0.8 } },
+//     .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 0.8, 0.7, 0.3 } },
+//     .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 0.8, 0.7, 0.3 } },
+// ];
+VERTICES :: Vertex.[
+    .{ position = .{ -0.5, -0.5, 0.0 }, color = .{ 0.8, 0.2, 0.3 }, uv = .{ 0.0, 1.0 } },
+    .{ position = .{  0.5, -0.5, 0.0 }, color = .{ 0.2, 0.8, 0.3 }, uv = .{ 0.0, 0.0 } },
+    .{ position = .{  0.5,  0.5, 0.0 }, color = .{ 0.2, 0.3, 0.8 }, uv = .{ 1.0, 0.0 } },
+    .{ position = .{ -0.5,  0.5, 0.0 }, color = .{ 0.8, 0.7, 0.3 }, uv = .{ 1.0, 1.0 } },
+];
+VERTICES_SIZE_BYTES :: size_of(type_of(VERTICES));
+
+// INDICES :: u32.[
+//     5, 7, 6, 6, 4, 5,
+//     7, 5, 3, 3, 1, 7,
+//     0, 1, 7, 7, 6, 0,
+//     1, 0, 2, 2, 3, 1,
+//     5, 3, 2, 2, 4, 5,
+//     4, 2, 0, 0, 6, 4,
+// ];
+INDICES :: u32.[0, 1, 2, 2, 3, 0];
+INDICES_SIZE_BYTES :: size_of(type_of(INDICES));
+
+// -------------------------------------------------------
+
+MAX_FRAMES_IN_FLIGHT :: 2;
+
+// -------------------------------------------------------
+
 main :: () {
-    setup_context(highest_logger_level = .Debug);
+    setup_context(highest_logger_level = .Trace);
 
     // -------------------------------------------------------
     // @Note: Create window
 
-    app_window := Window.create_window(WIDTH, HEIGHT, TITLE);
+    app_window := Window.create_window(window_width, window_height, window_title);
 
     // -------------------------------------------------------
     // @Note: Load vulkan dll and load global commands
@@ -64,13 +78,11 @@ main :: () {
     context.vk.module = Win32.LoadLibraryExW(utf8_to_wide("vulkan-1.dll"), null, flags = 0);
     defer Win32.FreeLibrary(context.vk.module);
 
-    Vk.load_global_proc_addresses((proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction #c_call {
-        ctx := cast(*Context) user_data;
-        push_context ctx {
-            assert(context.vk.module != null, "Must load the vk_module before loading global proc addresses!");
-            return xx Win32.GetProcAddress(context.vk.module, proc_name);
-        }
-    }, *context);
+    log_debug("Loading global proc addresses...");
+    Vk.load_global_proc_addresses((proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction {
+        assert(context.vk.module != null, "Must load the vk_module before loading global proc addresses!");
+        return xx Win32.GetProcAddress(context.vk.module, proc_name);
+    });
 
     // -------------------------------------------------------
     // @Note: Check that we have all required extensions
@@ -193,13 +205,17 @@ main :: () {
         };
 
         instance, _ := Vk.create_instance(*instance_ci);
+        log_trace("Create instance = %%");
         context.vk.instance.handle = instance;
     }
 
     defer Vk.DestroyInstance(context.vk.instance.handle, null);
+
+    log_debug("Loading instance proc addresses...");
     Vk.load_instance_proc_addresses(context.vk.instance.handle);
 
-    debug_messenger := Vk.create_debug_utils_messenger(context.vk.instance.handle, *debug_messenger_ci);
+    debug_messenger, _ := Vk.create_debug_utils_messenger(context.vk.instance.handle, *debug_messenger_ci);
+    log_trace("Create debug utils messenger = %%");
     defer Vk.DestroyDebugUtilsMessengerEXT(context.vk.instance.handle, debug_messenger, null);
 
     // -------------------------------------------------------
@@ -207,13 +223,13 @@ main :: () {
 
     {
         hinstance  := Win32.GetModuleHandleW(null);  // @Todo: Add GetModuleHandleExW to Windows module
-
         surface_ci := Vk.Win32SurfaceCreateInfoKHR.{
             hinstance = hinstance,
             hwnd      = app_window,
         };
 
         surface, _ := Vk.create_win32_surface(context.vk.instance.handle, *surface_ci);
+        log_trace("Create Win32 surface = %%");
         context.vk.surface.handle = surface;
     }
     defer Vk.DestroySurfaceKHR(context.vk.instance.handle, context.vk.surface.handle, null);
@@ -226,9 +242,11 @@ main :: () {
         defer array_free(available_physical_devices);
         assert(available_physical_devices.count > 0, "Physical device with Vulkan support not found!");
 
-        // @Note: For now just pick the first GPU that has the required device extensions, queue families, and swapchain support.
+        // @Note: For now just pick the first GPU we find that has all the things we need.
         //        Later we can pick the best one, or make a UI system to pick the GPU.
         for pd : available_physical_devices {
+            props := Vk.get_physical_device_properties(pd);
+
             available_device_extensions, _ := Vk.enumerate_device_extension_properties(pd, null);
             defer array_free(available_device_extensions);
 
@@ -266,20 +284,31 @@ main :: () {
                 }
             }
 
-            if !has_graphics_support || !has_transfer_support || !has_present_support then continue pd;
-
             surface_formats, _ := Vk.get_physical_device_surface_formats(pd, context.vk.surface.handle);
             defer array_free(surface_formats);
-            if surface_formats.count <= 0 then continue pd;
 
             present_modes, _ := Vk.get_physical_device_surface_present_modes(pd, context.vk.surface.handle);
             defer array_free(present_modes);
-            if present_modes.count <= 0 then continue pd;
+
+            features := Vk.get_physical_device_features(pd);
+
+            log_trace(
+                "% (0x%): Graphics = % | Transfer = % | Present = % | Surface formats = % | Present modes = % | Anisotropy = %",
+                to_string(props.deviceName.data), FormatInt.{value = props.deviceID, base = 16},
+                has_graphics_support, has_transfer_support, has_present_support, surface_formats.count, present_modes.count, features.samplerAnisotropy
+            );
+
+
+            if !has_graphics_support || !has_transfer_support || !has_present_support then continue pd;
+            if surface_formats.count <= 0                                             then continue pd;
+            if present_modes.count   <= 0                                             then continue pd;
+            if features.samplerAnisotropy == .FALSE                                   then continue pd;
 
             context.vk.device.physical_device = pd;
             break;
         }
-        assert(context.vk.device.physical_device != null, "Physical device with required device extensions, queue families, and swapchain support not found!");
+
+        assert(context.vk.device.physical_device != null, "Suitable physical device not found!\n");
         get_physical_device_info();
     }
 
@@ -344,7 +373,9 @@ main :: () {
         // -------------------------------------------------------
         // @Note: Create logical device and get queue handles
 
-        physical_device_features : Vk.PhysicalDeviceFeatures;
+        physical_device_features := Vk.PhysicalDeviceFeatures.{
+            samplerAnisotropy = .TRUE,
+        };
         device_ci := Vk.DeviceCreateInfo.{
             queueCreateInfoCount    = xx queue_create_infos.count,
             pQueueCreateInfos       = queue_create_infos.data,
@@ -358,10 +389,13 @@ main :: () {
         };
 
         device, _ := Vk.create_device(context.vk.device.physical_device, *device_ci);
+        log_trace("Create device = %%");
         context.vk.device.handle = device;
     }
 
     defer Vk.DestroyDevice(context.vk.device.handle, null);
+
+    log_debug("Loading device proc addresses...");
     Vk.load_device_proc_addresses(context.vk.device.handle);
     device := context.vk.device.handle;
 
@@ -387,6 +421,7 @@ main :: () {
 
         // @Note: If we can't find the preferred one then use the first available one
         if !found then context.vk.surface.format = pd_surface_formats[0];
+        log_debug("Surface format: Format = % | Color space = %", context.vk.surface.format.format, context.vk.surface.format.colorSpace);
     }
 
     // -------------------------------------------------------
@@ -398,34 +433,60 @@ main :: () {
     // -------------------------------------------------------
     // @Note: Create shader modules
 
-    vert_shader_path, found := table_find(*shader_table, "triangle.glsl.vert");
-    assert(found, "Invalid path to vertex shader binary!");
-    vert_shader_bin, success := read_entire_file(vert_shader_path);
-    assert(success, "Could not read vertex shader binary!");
+    log_debug("Loading vertex shader...");
+    log_indent();
+    vert_shader_bin : string;
+    {
+        shader_name :: "triangle.glsl.vert";
+
+        shader_path, success := table_find(*shader_table, shader_name);
+        assert(success, "Could not find shader \"%\" in shader table!", shader_name);
+        log_debug("Loading shader binary \"%\" (\"%\")", shader_name, shader_path);
+
+        vert_shader_bin, success = read_entire_file(shader_path);
+        assert(success, "Could not read shader binary from \"%\"!", shader_path);
+    }
     defer free(vert_shader_bin);
+
     vert_shader_module_ci := Vk.ShaderModuleCreateInfo.{
         codeSize = cast(u64)  vert_shader_bin.count,
         pCode    = cast(*u32) vert_shader_bin.data,
     };
     vert_shader_module, _ := Vk.create_shader_module(device, *vert_shader_module_ci);
+    log_trace("Create shader module = %%");
     defer Vk.DestroyShaderModule(device, vert_shader_module, null);
-    vert_shader_stage_ci := Vk.PipelineShaderStageCreateInfo.{
-        stage  = .VERTEX,
-        module = vert_shader_module,
-        pName  = "main",
-    };
+    log_unindent();
 
-    frag_shader_path:, found = table_find(*shader_table, "triangle.glsl.frag");
-    assert(found, "Invalid path to fragment shader binary!");
-    frag_shader_bin:, success = read_entire_file(frag_shader_path);
-    assert(success, "Could not read fragment shader binary!");
+    log_debug("Loading fragment shader...");
+    log_indent();
+    frag_shader_bin : string;
+    {
+        shader_name :: "triangle.glsl.frag";
+
+        shader_path, success := table_find(*shader_table, "triangle.glsl.frag");
+        assert(success, "Could not find shader \"%\" in shader table!", shader_name);
+        log_debug("Loading shader binary \"%\" (\"%\")", shader_name, shader_path);
+
+        frag_shader_bin, success = read_entire_file(shader_path);
+        assert(success, "Could not read shader binary from \"%\"!", shader_path);
+    }
     defer free(frag_shader_bin);
+
     frag_shader_module_ci := Vk.ShaderModuleCreateInfo.{
         codeSize = cast(u64)  frag_shader_bin.count,
         pCode    = cast(*u32) frag_shader_bin.data,
     };
     frag_shader_module, _ := Vk.create_shader_module(device, *frag_shader_module_ci);
+    log_trace("Create shader module = %%");
     defer Vk.DestroyShaderModule(device, frag_shader_module, null);
+    log_unindent();
+
+
+    vert_shader_stage_ci := Vk.PipelineShaderStageCreateInfo.{
+        stage  = .VERTEX,
+        module = vert_shader_module,
+        pName  = "main",
+    };
     frag_shader_stage_ci := Vk.PipelineShaderStageCreateInfo.{
         stage  = .FRAGMENT,
         module = frag_shader_module,
@@ -433,6 +494,81 @@ main :: () {
     };
 
     pipeline_shader_stages := Vk.PipelineShaderStageCreateInfo.[vert_shader_stage_ci, frag_shader_stage_ci];
+
+    // -------------------------------------------------------
+    // @Note: Setup descriptor set layout
+
+    descriptor_set_layout_bindings := Vk.DescriptorSetLayoutBinding.[
+        .{
+            binding            = 0,
+            descriptorType     = .UNIFORM_BUFFER,
+            descriptorCount    = 1,
+            stageFlags         = .VERTEX,
+            pImmutableSamplers = null,
+        },
+        .{
+            binding            = 1,
+            descriptorType     = .COMBINED_IMAGE_SAMPLER,
+            descriptorCount    = 1,
+            stageFlags         = .FRAGMENT,
+            pImmutableSamplers = null,
+        },
+    ];
+
+    descriptor_set_layout_ci := Vk.DescriptorSetLayoutCreateInfo.{
+        bindingCount = descriptor_set_layout_bindings.count,
+        pBindings    = descriptor_set_layout_bindings.data,
+    };
+
+    descriptor_set_layout, _ := Vk.create_descriptor_set_layout(context.vk.device.handle, *descriptor_set_layout_ci);
+    log_trace("Create descriptor set layout = %%");
+    defer Vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, null);
+
+    // -------------------------------------------------------
+    // @Note: Setup descriptor pool and descriptor sets
+
+    descriptor_pool_sizes := NewArray(descriptor_set_layout_bindings.count, Vk.DescriptorPoolSize);
+    for * descriptor_set_layout_bindings {
+         descriptor_pool_sizes[it_index] = .{
+            type            = it.descriptorType,
+            descriptorCount = MAX_FRAMES_IN_FLIGHT,
+        };
+    }
+
+    descriptor_pool_ci := Vk.DescriptorPoolCreateInfo.{
+        poolSizeCount = cast(u32) descriptor_pool_sizes.count,
+        pPoolSizes    = descriptor_pool_sizes.data,
+        maxSets       = MAX_FRAMES_IN_FLIGHT,
+        flags         = 0,
+    };
+
+    descriptor_pool, _ := Vk.create_descriptor_pool(context.vk.device.handle, *descriptor_pool_ci);
+    log_trace("Create descriptor pool = %%");
+    defer Vk.DestroyDescriptorPool(context.vk.device.handle, descriptor_pool, null);
+
+    set_layouts : [MAX_FRAMES_IN_FLIGHT]Vk.DescriptorSetLayout = .[descriptor_set_layout, descriptor_set_layout];
+
+    descriptor_set_ai := Vk.DescriptorSetAllocateInfo.{
+        descriptorPool     = descriptor_pool,
+        descriptorSetCount = set_layouts.count,
+        pSetLayouts        = set_layouts.data,
+    };
+
+    descriptor_sets, _ := Vk.allocate_descriptor_sets(context.vk.device.handle, *descriptor_set_ai);
+    log_trace("Allocate descriptor sets = %%");
+
+    // -------------------------------------------------------
+    // @Note: Setup pipeline layout
+
+    pipeline_layout_ci := Vk.PipelineLayoutCreateInfo.{
+        setLayoutCount         = 1,
+        pSetLayouts            = *descriptor_set_layout,
+        pushConstantRangeCount = 0,
+        pPushConstantRanges    = null,
+    };
+    pipeline_layout, _ := Vk.create_pipeline_layout(device, *pipeline_layout_ci);
+    log_trace("Create pipeline layout = %%");
+    defer Vk.DestroyPipelineLayout(device, pipeline_layout, null);
 
     // -------------------------------------------------------
     // @Note: Setup pipeline fixed function state
@@ -454,7 +590,8 @@ main :: () {
     ];
     vertex_input_attribute_descs := Vk.VertexInputAttributeDescription.[
         .{ binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "position") },
-        .{ binding = 0, location = 1, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "color") },
+        .{ binding = 0, location = 1, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "color"   ) },
+        .{ binding = 0, location = 2, format = .R32G32\  _SFLOAT, offset = cast(u32) offset_of(Vertex, "uv"      ) },
     ];
     vertex_input_state_ci := Vk.PipelineVertexInputStateCreateInfo.{
         vertexBindingDescriptionCount   = vertex_input_binding_descs.count,
@@ -472,7 +609,7 @@ main :: () {
         rasterizerDiscardEnable = .FALSE,
         polygonMode             = .FILL,
         lineWidth               = 1.0,
-        cullMode                = .NONE,
+        cullMode                = .BACK,
         frontFace               = .COUNTER_CLOCKWISE,
         depthBiasEnable         = .FALSE,
     };
@@ -516,69 +653,6 @@ main :: () {
     };
 
     // -------------------------------------------------------
-    // @Note: Setup descriptor set layout
-
-    descriptor_set_layout_bindings := Vk.DescriptorSetLayoutBinding.[
-        .{
-            binding            = 0,
-            descriptorType     = .UNIFORM_BUFFER,
-            descriptorCount    = 1,
-            stageFlags         = .VERTEX,
-            pImmutableSamplers = null,
-        }
-    ];
-
-    descriptor_set_layout_ci := Vk.DescriptorSetLayoutCreateInfo.{
-        bindingCount = descriptor_set_layout_bindings.count,
-        pBindings    = descriptor_set_layout_bindings.data,
-    };
-
-    descriptor_set_layout, _ := Vk.create_descriptor_set_layout(context.vk.device.handle, *descriptor_set_layout_ci);
-    defer Vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, null);
-
-    // -------------------------------------------------------
-    // @Note: Setup descriptor pool and descriptor sets
-
-    descriptor_pool_sizes := Vk.DescriptorPoolSize.[
-        .{
-            type            = .UNIFORM_BUFFER,
-            descriptorCount = MAX_FRAMES_IN_FLIGHT,
-        },
-    ];
-
-    descriptor_pool_ci := Vk.DescriptorPoolCreateInfo.{
-        poolSizeCount = descriptor_pool_sizes.count,
-        pPoolSizes    = descriptor_pool_sizes.data,
-        maxSets       = MAX_FRAMES_IN_FLIGHT,
-        flags         = 0,
-    };
-
-    descriptor_pool, _ := Vk.create_descriptor_pool(context.vk.device.handle, *descriptor_pool_ci);
-    defer Vk.DestroyDescriptorPool(context.vk.device.handle, descriptor_pool, null);
-
-    set_layouts : [MAX_FRAMES_IN_FLIGHT]Vk.DescriptorSetLayout = .[descriptor_set_layout, descriptor_set_layout];
-
-    descriptor_set_ai := Vk.DescriptorSetAllocateInfo.{
-        descriptorPool     = descriptor_pool,
-        descriptorSetCount = set_layouts.count,
-        pSetLayouts        = set_layouts.data,
-    };
-
-    descriptor_sets, _ := Vk.allocate_descriptor_sets(context.vk.device.handle, *descriptor_set_ai);
-
-    // -------------------------------------------------------
-    // @Note: Setup pipeline layout
-
-    pipeline_layout_ci := Vk.PipelineLayoutCreateInfo.{
-        setLayoutCount         = 1,
-        pSetLayouts            = *descriptor_set_layout,
-        pushConstantRangeCount = 0,
-        pPushConstantRanges    = null,
-    };
-    pipeline_layout, _ := Vk.create_pipeline_layout(device, *pipeline_layout_ci);
-    defer Vk.DestroyPipelineLayout(device, pipeline_layout, null);
-
-    // -------------------------------------------------------
     // @Note: Setup graphics pipeline
 
     gfx_pipeline_ci := Vk.GraphicsPipelineCreateInfo.{
@@ -601,6 +675,7 @@ main :: () {
     };
 
     gfx_pipeline, _ := Vk.create_one_graphics_pipeline(device, *gfx_pipeline_ci);
+    log_trace("Create graphics pipeline = %%");
     defer Vk.DestroyPipeline(device, gfx_pipeline, null);
 
     // -------------------------------------------------------
@@ -611,6 +686,7 @@ main :: () {
         queueFamilyIndex = context.vk.device.queue_family_indices[Queue_Family_Index_Type.Graphics],
     };
     gfx_cmdpool, _ := Vk.create_command_pool(device, *gfx_cmdpool_ci);
+    log_trace("Create graphics command pool = %%");
     defer Vk.DestroyCommandPool(device, gfx_cmdpool, null);
 
     transfer_cmdpool_ci := Vk.CommandPoolCreateInfo.{
@@ -618,152 +694,11 @@ main :: () {
         queueFamilyIndex = context.vk.device.queue_family_indices[Queue_Family_Index_Type.Transfer],
     };
     transfer_cmdpool, _ := Vk.create_command_pool(device, *transfer_cmdpool_ci);
+    log_trace("Create transfer command pool = %%");
     defer Vk.DestroyCommandPool(device, transfer_cmdpool, null);
 
     // -------------------------------------------------------
-    // @Note: Setup transfer command buffer for mapping data to the GPU before the first frame
-
-    transfer_cmdbuf_ai := Vk.CommandBufferAllocateInfo.{
-        commandPool = transfer_cmdpool,
-        level       = .PRIMARY,
-    };
-    transfer_cmdbuf, _ := Vk.allocate_one_command_buffer(device, *transfer_cmdbuf_ai);
-
-    // -------------------------------------------------------
-    // @Note: Setup vertex buffer
-
-    vertex_buf_mem, _ := buffer_with_memory_make(VERTICES_SIZE, .TRANSFER_DST | .VERTEX_BUFFER, .DEVICE_LOCAL);
-    defer buffer_with_memory_destroy(vertex_buf_mem);
-    {
-        // @Note: Making staging buffer for vertices
-        staging_buf_mem, _ := buffer_with_memory_make(VERTICES_SIZE, .TRANSFER_SRC, .HOST_VISIBLE | .HOST_COHERENT);
-        defer buffer_with_memory_destroy(staging_buf_mem);
-
-        // @Note: Copy vertices data to staging buffer
-        staging_data, _ := Vk.map_memory(device, staging_buf_mem.memory, offset = 0, size = VERTICES_SIZE);
-        mem_copy(staging_data, VERTICES.data, VERTICES_SIZE);
-        Vk.UnmapMemory(device, staging_buf_mem.memory);
-
-        // @Note: Perform BufferCopy from staging buffer to device buffer
-        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *Vk.CommandBufferBeginInfo.{});
-        {
-            buffer_copy := Vk.BufferCopy.{ size = VERTICES_SIZE };
-            Vk.cmd_copy_buffer(transfer_cmdbuf, staging_buf_mem.buffer, vertex_buf_mem.buffer, .[buffer_copy]);
-        }
-        _ := Vk.EndCommandBuffer(transfer_cmdbuf);
-
-        submit_info := Vk.SubmitInfo.{
-            commandBufferCount = 1,
-            pCommandBuffers    = *transfer_cmdbuf
-        };
-        Vk.queue_one_submit(transfer_queue, submit_info);
-        Vk.QueueWaitIdle(transfer_queue);
-    }
-
-    // -------------------------------------------------------
-    // @Note: Setup index buffer
-
-    Vk.ResetCommandBuffer(transfer_cmdbuf, 0);
-
-    index_buffer, _ := buffer_with_memory_make(INDICES_SIZE, .TRANSFER_DST | .INDEX_BUFFER, .DEVICE_LOCAL);
-    defer buffer_with_memory_destroy(index_buffer);
-    {
-        // @Note: Making staging buffer for indices
-        staging_buf_mem, _ := buffer_with_memory_make(INDICES_SIZE, .TRANSFER_SRC, .HOST_VISIBLE | .HOST_COHERENT);
-        defer buffer_with_memory_destroy(staging_buf_mem);
-
-        // @Note: Copy indices data to staging buffer
-        staging_data, _ := Vk.map_memory(device, staging_buf_mem.memory, offset = 0, size = INDICES_SIZE);
-        mem_copy(staging_data, INDICES.data, INDICES_SIZE);
-        Vk.UnmapMemory(device, staging_buf_mem.memory);
-
-        // @Note: Perform BufferCopy from staging buffer to device buffer
-        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *Vk.CommandBufferBeginInfo.{});
-        {
-            buffer_copy := Vk.BufferCopy.{ size = INDICES_SIZE };
-            Vk.cmd_copy_buffer(transfer_cmdbuf, staging_buf_mem.buffer, index_buffer.buffer, .[buffer_copy]);
-        }
-        _ := Vk.EndCommandBuffer(transfer_cmdbuf);
-
-        submit_info := Vk.SubmitInfo.{
-            commandBufferCount = 1,
-            pCommandBuffers    = *transfer_cmdbuf
-        };
-
-        Vk.queue_one_submit(transfer_queue, submit_info);
-        Vk.QueueWaitIdle(transfer_queue);
-    }
-
-    // -------------------------------------------------------
-    // @Note: Setup matrix uniform buffers
-
-    Uniform_Buffer :: struct {
-        using buf_mem : Buffer_With_Memory;
-        mapped        : *void;
-    }
-
-    matrix_uniform_buffers : [MAX_FRAMES_IN_FLIGHT]Uniform_Buffer;
-
-    for * matrix_uniform_buffers {
-
-        // @Note: Since these are going to change every frame, no point in making staging buffers for them.
-        //        Therefore, no need to make them have .TRANSFER_DST or be .DEVICE_LOCAL
-
-        it.buf_mem, _ = buffer_with_memory_make(size_of(Matrix_Uniforms), .UNIFORM_BUFFER, .HOST_VISIBLE | .HOST_COHERENT);
-        it.mapped,  _ = Vk.map_memory(context.vk.device.handle, it.memory, offset = 0, size = size_of(Matrix_Uniforms));
-
-        buffer_info := Vk.DescriptorBufferInfo.{
-            buffer = it.buffer,
-            offset = 0,
-            range  = size_of(Matrix_Uniforms),
-        };
-
-        descriptor_write := Vk.WriteDescriptorSet.{
-            dstSet           = descriptor_sets[it_index],
-            dstBinding       = 0,
-            dstArrayElement  = 0,
-            descriptorType   = .UNIFORM_BUFFER,
-            descriptorCount  = 1,
-            pBufferInfo      = *buffer_info,
-        };
-
-        Vk.update_descriptor_sets(context.vk.device.handle, .[descriptor_write], .[]);
-    }
-
-    defer for matrix_uniform_buffers {
-        Vk.UnmapMemory(context.vk.device.handle, it.memory);
-        buffer_with_memory_destroy(it.buf_mem);
-    }
-
-    // -------------------------------------------------------
-    // @Note: Setup swapchain
-
-    context.vk.swapchain = swapchain_make(context.vk.device, context.vk.surface, WIDTH, HEIGHT);
-    generate_swapchain_framebuffers(*context.vk.swapchain, context.vk.device, context.vk.render_pass);
-    defer swapchain_destroy(context.vk.swapchain, context.vk.device);
-
-    // -------------------------------------------------------
-    // @Note: Create synchronization objects
-
-    swapchain_image_sems : [MAX_FRAMES_IN_FLIGHT]Vk.Semaphore;
-    render_finished_sems : [MAX_FRAMES_IN_FLIGHT]Vk.Semaphore;
-    in_flight_fences     : [MAX_FRAMES_IN_FLIGHT]Vk.Fence;
-
-    for range(MAX_FRAMES_IN_FLIGHT) {
-        swapchain_image_sems[it], _ = Vk.create_semaphore(context.vk.device.handle, *Vk.SemaphoreCreateInfo.{});
-        render_finished_sems[it], _ = Vk.create_semaphore(context.vk.device.handle, *Vk.SemaphoreCreateInfo.{});
-
-        in_flight_fences[it], _ = Vk.create_fence(context.vk.device.handle, *Vk.FenceCreateInfo.{ flags = .SIGNALED });
-    }
-
-    defer for range(MAX_FRAMES_IN_FLIGHT) {
-        Vk.DestroySemaphore(context.vk.device.handle, swapchain_image_sems[it], null);
-        Vk.DestroySemaphore(context.vk.device.handle, render_finished_sems[it], null);
-        Vk.DestroyFence(context.vk.device.handle, in_flight_fences[it], null);
-    }
-
-    // -------------------------------------------------------
-    // @Note: Setup graphics command buffer
+    // @Note: Setup graphics and transfer command buffers
 
     gfx_cmdbuf_ai := Vk.CommandBufferAllocateInfo.{
         level              = .PRIMARY,
@@ -772,6 +707,366 @@ main :: () {
     };
 
     gfx_cmdbufs, _ := Vk.allocate_command_buffers(device, *gfx_cmdbuf_ai);
+    log_trace("Allocate graphics command buffers = %%");
+
+    transfer_cmdbuf_ai := Vk.CommandBufferAllocateInfo.{
+        commandPool = transfer_cmdpool,
+        level       = .PRIMARY,
+    };
+    transfer_cmdbuf, _ := Vk.allocate_one_command_buffer(device, *transfer_cmdbuf_ai);
+    log_trace("Allocate transfer command buffer = %%");
+
+    // -------------------------------------------------------
+    // @Note: Setup texture
+
+    log_debug("Loading texture...");
+    log_indent();
+
+    image_pixels  : *u8;
+    image_width, image_height : u32;
+    {
+        image_name :: "container";
+
+        image_path, success := table_find(*texture_table, image_name);
+        assert(success, "Could not find texture \"%\" in texture table!", image_name);
+        log_debug("Loading image \"%\" (\"%\")", image_name, image_path);
+
+        image_pixels, image_width, image_height = image_load(image_path);
+        assert(
+            image_pixels != null && image_width != 0 && image_height != 0,
+            "Could not load image \"%\" from \"%\"! (width = %, height = %, pixels = %)",
+            image_name, image_path, image_width, image_height, image_pixels
+        );
+    }
+
+    texture_image, _ := image_with_memory_make(image_width, image_height, .R8G8B8A8_SRGB, .OPTIMAL, .TRANSFER_DST | .SAMPLED, .DEVICE_LOCAL);
+    defer image_with_memory_destroy(texture_image);
+    {
+        log_trace("Copying image memory from buffer...");
+        log_indent_scope();
+
+        image_size := cast(s64) (image_width * image_height * 4);
+        staging_buf_mem, _ := buffer_with_memory_make(cast(Vk.DeviceSize) image_size, .TRANSFER_SRC, .HOST_VISIBLE | .HOST_COHERENT);
+        defer buffer_with_memory_destroy(staging_buf_mem);
+
+        staging_data, _ := Vk.map_memory(context.vk.device.handle, staging_buf_mem.memory, offset = 0, size = cast(Vk.DeviceSize) image_size);
+        log_trace("Map staging buffer memory = %%");
+
+        mem_copy(staging_data, image_pixels, image_size);
+        Vk.unmap_memory(context.vk.device.handle, staging_buf_mem.memory);
+
+        // @Note: Using graphics queue because you can't transition to shader read in transfer queue
+        _ := Vk.ResetCommandBuffer(gfx_cmdbufs[0], 0);
+        log_trace("Reset graphics command buffer = %%");
+        _ := Vk.BeginCommandBuffer(gfx_cmdbufs[0], *Vk.CommandBufferBeginInfo.{});
+        log_trace("Begin graphics command buffer = %%");
+        {
+            // @Note: Transition image layout to transfer dst
+            start_to_transfer_barrier := Vk.ImageMemoryBarrier.{
+                image            = texture_image.image,
+                oldLayout        = .UNDEFINED,
+                newLayout        = .TRANSFER_DST_OPTIMAL,
+                srcAccessMask    = 0,
+                dstAccessMask    = .TRANSFER_WRITE,
+                subresourceRange = .{
+                    aspectMask     = .COLOR,
+                    baseMipLevel   = 0,
+                    levelCount     = 1,
+                    baseArrayLayer = 0,
+                    layerCount     = 1,
+                },
+
+                srcQueueFamilyIndex = Vk.QUEUE_FAMILY_IGNORED,
+                dstQueueFamilyIndex = Vk.QUEUE_FAMILY_IGNORED,
+            };
+            Vk.cmd_pipeline_barrier(gfx_cmdbufs[0], .TOP_OF_PIPE, .TRANSFER, image_memory_barriers = .[start_to_transfer_barrier]);
+
+            // @Note: Copy buffer data to image
+            buffer_image_copy := Vk.BufferImageCopy.{
+                bufferOffset      = 0,
+                bufferRowLength   = 0,
+                bufferImageHeight = 0,
+                imageOffset       = .{0, 0, 0},
+                imageExtent       = .{image_width, image_height, 1},
+                imageSubresource  = .{
+                    aspectMask     = .COLOR,
+                    mipLevel       = 0,
+                    baseArrayLayer = 0,
+                    layerCount     = 1,
+                },
+            };
+            Vk.cmd_copy_buffer_to_image(gfx_cmdbufs[0], staging_buf_mem.buffer, texture_image.image, .TRANSFER_DST_OPTIMAL, .[buffer_image_copy]);
+
+            // @Note: Transition image layout to shader read only
+            transfer_to_shader_barrier := Vk.ImageMemoryBarrier.{
+                image            = texture_image.image,
+                oldLayout        = .TRANSFER_DST_OPTIMAL,
+                newLayout        = .SHADER_READ_ONLY_OPTIMAL,
+                srcAccessMask    = .TRANSFER_WRITE,
+                dstAccessMask    = .SHADER_READ,
+                subresourceRange = .{
+                    aspectMask     = .COLOR,
+                    baseMipLevel   = 0,
+                    levelCount     = 1,
+                    baseArrayLayer = 0,
+                    layerCount     = 1,
+                },
+
+                srcQueueFamilyIndex = Vk.QUEUE_FAMILY_IGNORED,
+                dstQueueFamilyIndex = Vk.QUEUE_FAMILY_IGNORED,
+            };
+            Vk.cmd_pipeline_barrier(gfx_cmdbufs[0], .TRANSFER, .FRAGMENT_SHADER, image_memory_barriers = .[transfer_to_shader_barrier]);
+        }
+        _ := Vk.EndCommandBuffer(gfx_cmdbufs[0]);
+        log_trace("End graphics command buffer = %%");
+
+        submit_info := Vk.SubmitInfo.{
+            commandBufferCount = 1,
+            pCommandBuffers    = *gfx_cmdbufs[0]
+        };
+        _ := Vk.queue_one_submit(gfx_queue, submit_info);
+        log_trace("Graphics queue submit = %%");
+        _ := Vk.QueueWaitIdle(gfx_queue);
+        log_trace("Graphics queue wait idle = %%");
+    }
+
+    // @Note: don't need this anymore, after copying
+    stbi_image_free(image_pixels);
+
+    // -------------------------------------------------------
+    // @Note: Create texture image view and sampler
+
+    texture_view_ci := Vk.ImageViewCreateInfo.{
+        image            = texture_image.image,
+        viewType         = ._2D,
+        format           = .R8G8B8A8_UNORM,
+        components       = .{ r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY },
+        subresourceRange = .{
+            aspectMask     = .COLOR,
+            baseMipLevel   = 0,
+            levelCount     = 1,
+            baseArrayLayer = 0,
+            layerCount     = 1,
+        },
+    };
+    texture_view, _ := Vk.create_image_view(context.vk.device.handle, *texture_view_ci);
+    log_trace("Create texture image view = %%");
+    defer Vk.DestroyImageView(context.vk.device.handle, texture_view, null);
+
+    texture_sampler_ci := Vk.SamplerCreateInfo.{
+        magFilter               = .LINEAR,
+        minFilter               = .LINEAR,
+        addressModeU            = .REPEAT,
+        addressModeV            = .REPEAT,
+        addressModeW            = .REPEAT,
+        mipmapMode              = .LINEAR,
+        mipLodBias              = 0.0,
+        minLod                  = 0.0,
+        maxLod                  = 0.0,
+        anisotropyEnable        = .TRUE,
+        maxAnisotropy           = context.vk.device.limits.maxSamplerAnisotropy,
+        borderColor             = .INT_OPAQUE_BLACK,
+        unnormalizedCoordinates = .FALSE,
+        compareEnable           = .FALSE,
+        compareOp               = .ALWAYS,
+    };
+    texture_sampler, _ := Vk.create_sampler(context.vk.device.handle, *texture_sampler_ci);
+    log_trace("Create texture sampler = %%");
+    defer Vk.DestroySampler(context.vk.device.handle, texture_sampler, null);
+    log_unindent();
+
+    // -------------------------------------------------------
+    // @Note: Setup vertex buffer
+
+    log_debug("Creating vertex buffer...");
+    log_indent();
+
+    vertex_buf_mem, _ := buffer_with_memory_make(VERTICES_SIZE_BYTES, .TRANSFER_DST | .VERTEX_BUFFER, .DEVICE_LOCAL);
+    defer buffer_with_memory_destroy(vertex_buf_mem);
+    {
+        log_trace("Copying vertex buffer data...");
+        log_indent_scope();
+
+        // @Note: Making staging buffer for vertices
+        staging_buf_mem, _ := buffer_with_memory_make(VERTICES_SIZE_BYTES, .TRANSFER_SRC, .HOST_VISIBLE | .HOST_COHERENT);
+        defer buffer_with_memory_destroy(staging_buf_mem);
+
+        // @Note: Copy vertices data to staging buffer
+        staging_data, _ := Vk.map_memory(device, staging_buf_mem.memory, offset = 0, size = VERTICES_SIZE_BYTES);
+        log_trace("Map staging buffer memory = %%");
+        mem_copy(staging_data, VERTICES.data, VERTICES_SIZE_BYTES);
+        Vk.unmap_memory(device, staging_buf_mem.memory);
+
+        // @Note: Perform BufferCopy from staging buffer to device buffer
+        _ := Vk.ResetCommandBuffer(transfer_cmdbuf, 0);
+        log_trace("Reset transfer command buffer = %%");
+        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *Vk.CommandBufferBeginInfo.{});
+        log_trace("Begin transfer command buffer = %%");
+        {
+            buffer_copy := Vk.BufferCopy.{ size = VERTICES_SIZE_BYTES };
+            Vk.cmd_copy_buffer(transfer_cmdbuf, staging_buf_mem.buffer, vertex_buf_mem.buffer, .[buffer_copy]);
+        }
+        _ := Vk.EndCommandBuffer(transfer_cmdbuf);
+        log_trace("End transfer command buffer = %%");
+
+        submit_info := Vk.SubmitInfo.{
+            commandBufferCount = 1,
+            pCommandBuffers    = *transfer_cmdbuf
+        };
+        _ := Vk.queue_one_submit(transfer_queue, submit_info);
+        log_trace("Transfer queue submit = %%");
+        _ := Vk.QueueWaitIdle(transfer_queue);
+        log_trace("Transfer queue wait idle = %%");
+    }
+    log_unindent();
+
+    // -------------------------------------------------------
+    // @Note: Setup index buffer
+
+    log_debug("Creating index buffer...");
+    log_indent();
+
+    index_buffer, _ := buffer_with_memory_make(INDICES_SIZE_BYTES, .TRANSFER_DST | .INDEX_BUFFER, .DEVICE_LOCAL);
+    defer buffer_with_memory_destroy(index_buffer);
+    {
+        log_trace("Copying index buffer data...");
+        log_indent_scope();
+
+        // @Note: Making staging buffer for indices
+        staging_buf_mem, _ := buffer_with_memory_make(INDICES_SIZE_BYTES, .TRANSFER_SRC, .HOST_VISIBLE | .HOST_COHERENT);
+        defer buffer_with_memory_destroy(staging_buf_mem);
+
+        // @Note: Copy indices data to staging buffer
+        staging_data, _ := Vk.map_memory(device, staging_buf_mem.memory, offset = 0, size = INDICES_SIZE_BYTES);
+        log_trace("Map staging buffer memory = %%");
+        mem_copy(staging_data, INDICES.data, INDICES_SIZE_BYTES);
+        Vk.unmap_memory(device, staging_buf_mem.memory);
+
+        // @Note: Perform BufferCopy from staging buffer to device buffer
+        _ := Vk.ResetCommandBuffer(transfer_cmdbuf, 0);
+        log_trace("Reset transfer command buffer = %%");
+        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *Vk.CommandBufferBeginInfo.{});
+        log_trace("Begin transfer command buffer = %%");
+        {
+            buffer_copy := Vk.BufferCopy.{ size = INDICES_SIZE_BYTES };
+            Vk.cmd_copy_buffer(transfer_cmdbuf, staging_buf_mem.buffer, index_buffer.buffer, .[buffer_copy]);
+        }
+        _ := Vk.EndCommandBuffer(transfer_cmdbuf);
+        log_trace("End transfer command buffer = %%");
+
+        submit_info := Vk.SubmitInfo.{
+            commandBufferCount = 1,
+            pCommandBuffers    = *transfer_cmdbuf
+        };
+        _ := Vk.queue_one_submit(transfer_queue, submit_info);
+        log_trace("Transfer queue submit = %%");
+        _ := Vk.QueueWaitIdle(transfer_queue);
+        log_trace("Transfer queue wait idle = %%");
+    }
+    log_unindent();
+
+    // -------------------------------------------------------
+    // @Note: Setup uniforms
+
+    Uniform_Buffer :: struct {
+        using buf_mem : Buffer_With_Memory;
+        mapped        : *void;
+    }
+
+    matrix_uniform_buffers : [MAX_FRAMES_IN_FLIGHT]Uniform_Buffer;
+
+    log_debug("Setting up uniforms (%) ...", MAX_FRAMES_IN_FLIGHT);
+    log_indent();
+    for range(MAX_FRAMES_IN_FLIGHT) {
+        descriptor_writes := NewArray(descriptor_set_layout_bindings.count, Vk.WriteDescriptorSet);
+
+        log_trace("(%) Creating descriptor writes (%) ...", it, descriptor_writes.count);
+        for binding, bi : descriptor_set_layout_bindings {
+            log_indent_scope();
+
+            if binding.descriptorType == {
+                case .UNIFORM_BUFFER;
+                    log_trace("(%) Creating uniform buffer...", bi);
+                    log_indent_scope();
+
+                    // @Note: Since these are going to change every frame, no point in making staging buffers for them.
+                    //        Therefore, no need to make them be .TRANSFER_DST or .DEVICE_LOCAL
+                    matrix_uniform_buffers[it].buf_mem, _ = buffer_with_memory_make(size_of(Matrix_Uniforms), .UNIFORM_BUFFER, .HOST_VISIBLE | .HOST_COHERENT);
+                    matrix_uniform_buffers[it].mapped,  _ = Vk.map_memory(context.vk.device.handle, matrix_uniform_buffers[it].memory, offset = 0, size = size_of(Matrix_Uniforms));
+                    log_trace("Map matrix uniform memory = %%");
+
+                    buffer_info := Vk.DescriptorBufferInfo.{
+                        buffer = matrix_uniform_buffers[it].buffer,
+                        offset = 0,
+                        range  = size_of(Matrix_Uniforms),
+                    };
+
+                    descriptor_writes[bi] = .{
+                        dstSet           = descriptor_sets[it],
+                        dstBinding       = binding.binding,
+                        dstArrayElement  = 0,
+                        descriptorType   = binding.descriptorType,
+                        descriptorCount  = binding.descriptorCount,
+                        pBufferInfo      = *buffer_info, // @Volatile!!
+                    };
+
+                case .COMBINED_IMAGE_SAMPLER;
+                    log_trace("(%) Creating image sampler...", bi);
+                    log_indent_scope();
+
+                    image_info := Vk.DescriptorImageInfo.{
+                        imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+                        imageView   = texture_view,
+                        sampler     = texture_sampler,
+                    };
+
+                    descriptor_writes[bi] = .{
+                        dstSet           = descriptor_sets[it],
+                        dstBinding       = binding.binding,
+                        dstArrayElement  = 0,
+                        descriptorType   = binding.descriptorType,
+                        descriptorCount  = binding.descriptorCount,
+                        pImageInfo       = *image_info, // @Volatile!!
+                    };
+
+                case;
+                    assert(false, "Unhandled descriptor type %!", binding.descriptorType);
+            }
+        }
+
+        log_trace("(%) Updating descriptor sets...", it);
+        Vk.update_descriptor_sets(context.vk.device.handle, writes = descriptor_writes);
+    }
+    log_unindent();
+
+    defer for matrix_uniform_buffers {
+        Vk.unmap_memory(context.vk.device.handle, it.memory);
+        buffer_with_memory_destroy(it.buf_mem);
+    }
+
+    // -------------------------------------------------------
+    // @Note: Setup swapchain
+
+    swapchain_make(window_width, window_height);
+    defer swapchain_destroy();
+
+    // -------------------------------------------------------
+    // @Note: Create synchronization objects
+
+    frame_syncs : [MAX_FRAMES_IN_FLIGHT]Frame_Sync;
+
+    log_debug("Creating frame syncs (%) ...", frame_syncs.count);
+    log_indent();
+    for * frame_syncs {
+        log_debug("(%) Creating frame sync...", it_index);
+        log_indent_scope();
+        it.*, _ = frame_sync_make();
+    }
+    log_unindent();
+
+    defer for frame_syncs {
+        frame_sync_destroy(it);
+    }
 
     // -------------------------------------------------------
     // @Note: Main loop
@@ -780,11 +1075,11 @@ main :: () {
     start_time        := get_time();
     current_time      : float64;
 
-    camera_pos     := Vector3.{2, 2, 0};
+    camera_pos     := Vector3.{0, 0, 2};
     camera_forward := normalize(.{0, 0, 0} - camera_pos);
     camera_left    := normalize(cross_product(.{0, 0, 1}, camera_forward));
     camera_up      := cross_product(camera_forward, camera_left);
-    camera_speed   := 0.01;
+    camera_speed   := 0.1;
 
     while main_loop := true {
         swapchain := *context.vk.swapchain;
@@ -795,13 +1090,22 @@ main :: () {
         // -------------------------------------------------------
         // @Note: Handle resizes
 
+        should_resize := false;
         for Input.get_window_resizes() {
+            // @Note: We don't care about other windows for now
             if it.window != app_window then continue;
+            // @Note: If we are minimized, we shouldn't try to render anything
             if it.width <= 0 || it.height <= 0 then continue main_loop;
 
             width  := cast(u32) it.width;
             height := cast(u32) it.height;
-            recreate_swapchain(swapchain, context.vk.device, context.vk.surface, context.vk.render_pass, width, height);
+
+            // @Note: Don't recreate if we already have the swapchain extent we need
+            if width == window_width && height == window_height then continue;
+
+            window_width  = width;
+            window_height = height;
+            should_resize = true;
         }
 
         reset_temporary_storage();
@@ -834,16 +1138,26 @@ main :: () {
 
         // -------------------------------------------------------
 
-        in_flight_fence     := in_flight_fences    [current_frame_idx];
-        swapchain_image_sem := swapchain_image_sems[current_frame_idx];
-        render_finished_sem := render_finished_sems[current_frame_idx];
-        cmdbuf              := gfx_cmdbufs         [current_frame_idx];
+        in_flight_fence     := frame_syncs[current_frame_idx].in_flight_fence;
+        swapchain_image_sem := frame_syncs[current_frame_idx].swapchain_image_sem;
+        render_finished_sem := frame_syncs[current_frame_idx].render_finished_sem;
+        cmdbuf              := gfx_cmdbufs[current_frame_idx];
 
         // -------------------------------------------------------
-        // @Note: Reset fences
+        // @Note: Get next swapchain image, recreate if out of date
 
         Vk.wait_for_one_fence(device, in_flight_fence);
-        swapchain_image_idx, _ := Vk.acquire_next_image(device, swapchain.handle, semaphore = swapchain_image_sem);
+
+        swapchain_image_idx : u32;
+        {
+            swapchain_image_idx=, result := Vk.acquire_next_image(device, swapchain.handle, semaphore = swapchain_image_sem);
+            if result == .ERROR_OUT_OF_DATE_KHR {
+                recreate_swapchain(window_width, window_height);
+                continue main_loop;
+            }
+            assert(result == .SUCCESS || result == .SUBOPTIMAL_KHR, "Failed to acquire swapchain image! Result: %", result);
+        }
+
         _ := Vk.reset_one_fence(device, in_flight_fence);
 
         // -------------------------------------------------------
@@ -905,7 +1219,7 @@ main :: () {
         aspect := cast(float) swapchain.width / swapchain.height;
 
         q : Quaternion;
-        set_from_axis_and_angle(*q, .{0, 1, 0}, cast(float) (current_time * (PI / 2))); // @Note: Radians
+        set_from_axis_and_angle(*q, .{0, 0, 1}, cast(float) (current_time * (PI / 2))); // @Note: Radians
 
         perspective_lh_zo :: (fov_y : float, aspect : float, near : float, far : float) -> Matrix4 {
             // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_clip_space.inl#L265-L278
@@ -921,7 +1235,7 @@ main :: () {
             return result;
         }
 
-        look_at_lh :: (eye : Vector3, center : Vector3, up_ref := Vector3.{0, 0, 1}) -> Matrix4 {
+        look_at_lh :: (eye : Vector3, center : Vector3, up_ref := Vector3.{0, 1, 0}) -> Matrix4 {
             // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_transform.inl#L176-L196
             forward := normalize(center - eye);
             left    := normalize(cross_product(up_ref, forward));
@@ -955,7 +1269,7 @@ main :: () {
             signalSemaphoreCount = 1,
             pSignalSemaphores    = *render_finished_sem,
         };
-        Vk.queue_one_submit(gfx_queue, submit_info, in_flight_fence);
+        _ := Vk.queue_one_submit(gfx_queue, submit_info, in_flight_fence);
 
         // -------------------------------------------------------
         // @Note: Present swapchain using present queue
@@ -968,19 +1282,26 @@ main :: () {
             pImageIndices      = *swapchain_image_idx,
         };
 
-        _ := Vk.QueuePresentKHR(present_queue, *present_info);
+        result := Vk.QueuePresentKHR(present_queue, *present_info);
+        if result == .ERROR_OUT_OF_DATE_KHR || result == .SUBOPTIMAL_KHR || should_resize {
+            recreate_swapchain(window_width, window_height);
+        }
+        else {
+            assert(result == .SUCCESS, "Failed to present swapchain image! Result: %", result);
+        }
 
         current_frame_idx = (current_frame_idx + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     // @Note: Let the device finish any remaning operations before cleaning up resources
-    Vk.DeviceWaitIdle(device);
+    _ := Vk.DeviceWaitIdle(device);
 }
 
 // -------------------------------------------------------
 
-// @Note: see assets/shaders/_generated_shader_table.jai
+// @Note: see assets/shaders/_generated_*_table.jai
 #placeholder shader_table;
+#placeholder texture_table;
 
 // -------------------------------------------------------
 
@@ -1003,6 +1324,7 @@ Win32  :: #import "Windows";
 #import "Math";
 #import "Print_Color";
 #import "Sloppy_Math";
+#import "stb_image";
 #import "Windows_Utf8";
 
 using,except(Table) HT :: #import "Hash_Table";

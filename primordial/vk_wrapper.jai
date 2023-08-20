@@ -104,6 +104,12 @@ create_graphics_pipelines :: (device : Device, create_infos : []GraphicsPipeline
     return pipelines, result;
 }
 
+create_image :: (device : Device, create_info : *ImageCreateInfo, allocation_callbacks : *AllocationCallbacks = null) -> Image, Result {
+    image : Image;
+    result := CreateImage(device, create_info, allocation_callbacks, *image);
+    return image, result;
+}
+
 create_image_view :: (device : Device, create_info : *ImageViewCreateInfo, allocation_callbacks : *AllocationCallbacks = null) -> ImageView, Result {
     view : ImageView;
     result := CreateImageView(device, create_info, allocation_callbacks, *view);
@@ -126,6 +132,12 @@ create_render_pass :: (device : Device, create_info : *RenderPassCreateInfo, all
     render_pass : RenderPass;
     result := CreateRenderPass(device, create_info, allocation_callbacks, *render_pass);
     return render_pass, result;
+}
+
+create_sampler :: (device : Device, create_info : *SamplerCreateInfo, allocation_callbacks : *AllocationCallbacks = null) -> Sampler, Result {
+    sampler : Sampler;
+    result := CreateSampler(device, create_info, allocation_callbacks, *sampler);
+    return sampler, result;
 }
 
 create_semaphore :: (device : Device, create_info : *SemaphoreCreateInfo, allocation_callbacks : *AllocationCallbacks = null) -> Semaphore, Result {
@@ -164,6 +176,12 @@ get_device_queue :: (device : Device, queueFamilyIndex : u32, queueIndex : u32) 
     queue : Queue;
     GetDeviceQueue(device, queueFamilyIndex, queueIndex, *queue);
     return queue;
+}
+
+get_image_memory_requirements :: (device : Device, image : Image) -> MemoryRequirements {
+    memory_requirements : MemoryRequirements;
+    GetImageMemoryRequirements(device, image, *memory_requirements);
+    return memory_requirements;
 }
 
 get_physical_device_properties :: (physical_device : PhysicalDevice) -> PhysicalDeviceProperties {
@@ -287,6 +305,10 @@ allocate_memory :: (device : Device, alloc_info : *MemoryAllocateInfo, allocatio
     return memory, result;
 }
 
+free_memory :: inline (device : Device, memory : DeviceMemory, allocation_callbacks : *AllocationCallbacks = null) {
+    FreeMemory(device, memory, allocation_callbacks);
+}
+
 // -------------------------------------------------------
 
 cmd_bind_descriptor_sets :: inline (command_buffer : CommandBuffer, bind_point : PipelineBindPoint, layout : PipelineLayout, descriptor_sets : []DescriptorSet, first_set : u32 = 0, dynamic_offsets : []u32 = .[]) {
@@ -314,12 +336,20 @@ cmd_copy_buffer :: inline (command_buffer : CommandBuffer, src_buffer : Buffer, 
     CmdCopyBuffer(command_buffer, src_buffer, dst_buffer, cast(u32) regions.count, regions.data);
 }
 
+cmd_copy_buffer_to_image :: inline (command_buffer : CommandBuffer, src_buffer : Buffer, dst_image : Image, dst_image_layout : ImageLayout, regions : []BufferImageCopy) {
+    CmdCopyBufferToImage(command_buffer, src_buffer, dst_image, dst_image_layout, cast(u32) regions.count, regions.data);
+}
+
 cmd_draw :: inline (command_buffer : CommandBuffer, vertex_count : u32, instance_count : u32 = 1, first_vertex : u32 = 0, first_instance : u32 = 0) {
     CmdDraw(command_buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
 cmd_draw_indexed :: inline (command_buffer : CommandBuffer, index_count : u32, instance_count : u32 = 1, first_index : u32 = 0, vertex_offset : s32 = 0, first_instance : u32 = 0) {
     CmdDrawIndexed(command_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
+}
+
+cmd_pipeline_barrier :: inline (command_buffer : CommandBuffer, src_stage_mask : PipelineStageFlags, dst_stage_mask : PipelineStageFlags, dependency_flags : DependencyFlags = 0, memory_barriers : []MemoryBarrier = .[], buffer_memory_barriers : []BufferMemoryBarrier = .[], image_memory_barriers : []ImageMemoryBarrier = .[]) {
+    CmdPipelineBarrier(command_buffer, src_stage_mask, dst_stage_mask, dependency_flags, cast(u32) memory_barriers.count, memory_barriers.data, cast(u32) buffer_memory_barriers.count, buffer_memory_barriers.data, cast(u32) image_memory_barriers.count, image_memory_barriers.data);
 }
 
 cmd_set_one_scissor :: inline (command_buffer : CommandBuffer, scissor : Rect2D) {
@@ -380,8 +410,12 @@ map_memory :: (device : Device, memory : DeviceMemory, offset : DeviceSize, size
     return mapped, result;
 }
 
-update_descriptor_sets :: inline (device : Device, descriptor_writes : []WriteDescriptorSet, descriptor_copies : []CopyDescriptorSet) {
-    UpdateDescriptorSets(device, cast(u32) descriptor_writes.count, descriptor_writes.data, cast(u32) descriptor_copies.count, descriptor_copies.data);
+unmap_memory :: inline (device : Device, memory : DeviceMemory) {
+    UnmapMemory(device, memory);
+}
+
+update_descriptor_sets :: inline (device : Device, writes : []WriteDescriptorSet = .[], copies : []CopyDescriptorSet = .[]) {
+    UpdateDescriptorSets(device, cast(u32) writes.count, writes.data, cast(u32) copies.count, copies.data);
 }
 
 // -------------------------------------------------------
