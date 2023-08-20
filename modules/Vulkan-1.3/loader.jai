@@ -1,4 +1,8 @@
-load_global_proc_addresses :: (loader_proc: (proc_name : *u8, user_data : *void) -> PFN_vkVoidFunction #c_call, user_data: *void) {
+//
+// Generated loader file. Do not modify.
+//
+
+load_global_proc_addresses :: (loader_proc: (proc_name: *u8, user_data: *void) -> PFN_vkVoidFunction, user_data: *void = null) {
     CreateInstance                       = xx loader_proc("vkCreateInstance", user_data);
     GetInstanceProcAddr                  = xx loader_proc("vkGetInstanceProcAddr", user_data);
     EnumerateInstanceExtensionProperties = xx loader_proc("vkEnumerateInstanceExtensionProperties", user_data);

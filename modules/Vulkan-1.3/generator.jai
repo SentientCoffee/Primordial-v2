@@ -1,8 +1,7 @@
-// MIT License - Copyright (c) 2022 Hamad Almamari
-// Tested with vulkan 1.0 and 1.2
+// MIT License - Copyright (c) 2022-2023 Hamad Almamari
 // You can use this file to generate any version of vulkan bindings.
 // You only need to set the vulkan.h and vulkan lib paths.
-// Modified by Ryan Capote for Vulkan 1.3
+// Modified by Ryan Capote and Daniel Presas for Vulkan 1.3.250
 
 // config
 AT_COMPILE_TIME   :: true;
@@ -14,9 +13,7 @@ vulkan_h_location :: "src/vulkan.h";
     extra_source_files :: string.[];
 }
 
-#if AT_COMPILE_TIME {
-
-#run {
+#if AT_COMPILE_TIME then #run {
     set_build_options_dc(.{do_output=false});
     if !generate_bindings() {
         compiler_set_workspace_status(.FAILED);
@@ -25,31 +22,28 @@ vulkan_h_location :: "src/vulkan.h";
         compiler_set_workspace_status(.FAILED);
     }
 }
-
-}
 else {
+    #import "System";
 
-#import "System";
+    #run {
+        make_directory_if_it_does_not_exist("build");
+        set_build_options_dc(.{output_executable_name = "vulkan_bindings_gen", output_path = "build"});
 
-#run {
-    make_directory_if_it_does_not_exist("build");
-    set_build_options_dc(.{output_executable_name = "vulkan_bindings_gen", output_path = "build"});
-
-    libclang_path := "build/libclang.dll";
-    if !file_exists(libclang_path) {
-        log_error("We need libclang.dll to be able to generate bindings...Exiting.");
-        compiler_set_workspace_status(.FAILED);
+        libclang_path := "build/libclang.dll";
+        if !file_exists(libclang_path) {
+            log_error("We need libclang.dll to be able to generate bindings...Exiting.");
+            compiler_set_workspace_status(.FAILED);
+        }
     }
-}
 
-main :: () {
-    if !generate_bindings() {
-        exit(1);
+    main :: () {
+        if !generate_bindings() {
+            exit(1);
+        }
+        if !generate_loader() {
+            exit(1);
+        }
     }
-    if !generate_loader() {
-        exit(1);
-    }
-}
 
 }
 
@@ -154,11 +148,13 @@ generate_loader :: () -> bool {
     loader_builder : String_Builder;
     init_string_builder(*loader_builder);
 
+    append(*loader_builder, "//\n// Generated loader file. Do not modify.\n//\n\n");
+
     //
     // Global procs
     //
     max_proc_name_size := min_of_type(s64);
-    append(*loader_builder, "load_global_proc_addresses :: (loader_proc: (proc_name : *u8, user_data : *void) -> PFN_vkVoidFunction #c_call, user_data: *void) {\n");
+    append(*loader_builder, "load_global_proc_addresses :: (loader_proc: (proc_name: *u8, user_data: *void) -> PFN_vkVoidFunction, user_data: *void = null) {\n");
 
     for global_procs {
         if it.output_name.count > max_proc_name_size then max_proc_name_size = it.output_name.count;

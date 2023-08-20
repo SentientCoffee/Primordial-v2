@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai ./modules/Vulkan-1.3/generate.jai
+// jai ./modules/Vulkan-1.3/generator.jai
 //
 
 
