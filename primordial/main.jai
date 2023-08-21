@@ -36,78 +36,91 @@ DRAW_CMD : enum {
 
 #if DRAW_CMD == .CmdDraw {
     VERTICES :: Vertex.[
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
-        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 1
-        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
-        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
-        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 1
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 3
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
 
-        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
-        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
-        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 7
-        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 5
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 7
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
 
-        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 8
-        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 9
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
-        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
-        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 8
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 8
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 9
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 10
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 10
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 8
 
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
-        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
-        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 12
-        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 12
-        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 13
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 12
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 13
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 14
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 14
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 15
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 12
 
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
-        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 14
-        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
-        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
-        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 16
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 17
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 18
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 18
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 19
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 16
 
-        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
-        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
-        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 15
-        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 20
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 21
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 22
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 22
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 23
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 24
     ];
 
-    INDICES :: u32.[];
+    INDICES :: u32.[0];
 }
 else #if DRAW_CMD == .CmdDrawIndexed {
     VERTICES :: Vertex.[
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
-        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 1
-        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
-        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
-        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
-        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
-        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 7
-        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 8
-        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 9
-        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
-        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
-        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 12
-        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 13
-        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 14
-        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 15
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 1
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 3
+
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 5
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 7
+
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 8
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 9
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 10
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 12
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 13
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 14
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 15
+
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 16
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 17
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 18
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 19
+
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 20
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 21
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 22
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 23
     ];
 
     INDICES :: u32.[
          0,  1,  2,  2,  3,  0,
          4,  5,  6,  6,  7,  4,
-         8,  9, 10, 10,  4,  8,
-        11,  2, 12, 12, 13, 11,
-        10, 14,  5,  5,  4, 10,
-         3,  2, 11, 11, 15,  3,
+         8,  9, 10, 10, 11,  8,
+        12, 13, 14, 14, 15, 12,
+        16, 17, 18, 18, 19, 16,
+        20, 21, 22, 22, 23, 20,
     ];
 }
 
@@ -682,7 +695,7 @@ main :: () {
         rasterizerDiscardEnable = .FALSE,
         polygonMode             = .FILL,
         lineWidth               = 1.0,
-        cullMode                = .NONE,
+        cullMode                = .BACK,
         frontFace               = .COUNTER_CLOCKWISE,
         depthBiasEnable         = .FALSE,
     };
@@ -1136,10 +1149,11 @@ main :: () {
     current_time      : float64;
 
     camera_pos     := Vector3.{0, 2, 2};
-    camera_forward := normalize(.{0, 0, 0} - camera_pos);
-    camera_left    := normalize(cross_product(.{0, 1, 0}, camera_forward));
-    camera_up      := cross_product(camera_forward, camera_left);
-    camera_speed   := 0.05;
+    camera_forward := normalize(camera_pos - .{0, 0, 0});
+    camera_right   := normalize(cross_product(.{0, 1, 0}, camera_forward));
+    camera_up      := cross_product(camera_forward, camera_right);
+    camera_speed   := 0.02;
+    camera_fov     := 70.0;
 
     while main_loop := true {
         swapchain := *context.vk.swapchain;
@@ -1179,23 +1193,27 @@ main :: () {
             if it.type == {
                 case .QUIT;
                     break main_loop;
+
                 case .KEYBOARD;
                     if it.key_code == #char "Q" && it.modifier_flags.ctrl_pressed {
                         break main_loop;
                     }
+
+                case .MOUSE_WHEEL;
+                    camera_fov -= cast(float) (it.wheel_delta/it.typical_wheel_delta * dt);
             }
         }
 
         camera_pos_add := Vector3.{};
 
-        if Input.input_button_states[#char "W"] == .DOWN then camera_pos_add +=  camera_forward;
-        if Input.input_button_states[#char "S"] == .DOWN then camera_pos_add += -camera_forward;
-        if Input.input_button_states[#char "A"] == .DOWN then camera_pos_add +=  camera_left;
-        if Input.input_button_states[#char "D"] == .DOWN then camera_pos_add += -camera_left;
+        if Input.input_button_states[#char "W"] == .DOWN then camera_pos_add += -camera_forward;
+        if Input.input_button_states[#char "S"] == .DOWN then camera_pos_add +=  camera_forward;
+        if Input.input_button_states[#char "A"] == .DOWN then camera_pos_add +=  camera_right;
+        if Input.input_button_states[#char "D"] == .DOWN then camera_pos_add += -camera_right;
         if Input.input_button_states[#char "Z"] == .DOWN then camera_pos_add +=  camera_up;
         if Input.input_button_states[#char "X"] == .DOWN then camera_pos_add += -camera_up;
 
-        camera_pos += normalize_or_zero(camera_pos_add) * camera_speed * dt;
+        camera_pos += camera_pos_add * camera_speed * dt;
 
         // -------------------------------------------------------
 
@@ -1290,12 +1308,12 @@ main :: () {
 
         look_at :: (eye : Vector3, center : Vector3, up_ref := Vector3.{0, 1, 0}) -> Matrix4 {
             // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_transform.inl#L176-L196
-            forward := normalize(center - eye);
-            left    := normalize(cross_product(up_ref, forward));
-            up      := cross_product(forward, left);
+            forward := normalize(eye - center);
+            right   := normalize(cross_product(up_ref, forward));
+            up      := cross_product(forward, right);
 
-            result := make_matrix_from_columns(left, up, forward);
-            result._41 = -dot_product(left, eye);
+            result := make_matrix_from_columns(right, up, forward);
+            result._41 = -dot_product(right, eye);
             result._42 = -dot_product(up, eye);
             result._43 = -dot_product(forward, eye);
 
@@ -1318,8 +1336,8 @@ main :: () {
 
         matrix_uniforms := Matrix_Uniforms.{
             model = rotate(Matrix4_Identity, q) * translate(Matrix4_Identity, .{0, 0, 0}),
-            view  = look_at(camera_pos, camera_forward),
-            proj  = perspective(60.0 * (PI / 180), aspect, 0.1, 10.0),
+            view  = look_at(camera_pos, camera_pos + camera_forward),
+            proj  = perspective(camera_fov * (PI / 180), aspect, 0.1, 100.0),
         };
         mem_copy(matrix_uniform_buffers[current_frame_idx].mapped, *matrix_uniforms, size_of(Matrix_Uniforms));
 
