@@ -24,7 +24,7 @@ Instance :: struct {
 
 Surface :: struct {
     handle : Vk.SurfaceKHR;
-    format     : Vk.SurfaceFormatKHR;
+    format : Vk.SurfaceFormatKHR;
 }
 
 // -------------------------------------------------------
@@ -90,12 +90,6 @@ Buffer_With_Memory :: struct {
     memory : Vk.DeviceMemory;
 }
 
-Image :: struct {
-    image   : Vk.Image;
-    view    : Vk.ImageView;
-    memory  : Vk.DeviceMemory;
-}
-
 get_memory_type_index :: (memory_property_flags : Vk.MemoryPropertyFlags, memory_type_bits : u32) -> u32 {
     physical_device   := context.vk.device.physical_device;
     memory_properties := Vk.get_physical_device_memory_properties(physical_device);
@@ -115,14 +109,14 @@ get_memory_type_index :: (memory_property_flags : Vk.MemoryPropertyFlags, memory
     return memory_type_index;
 }
 
-buffer_with_memory_make :: (buffer_size : Vk.DeviceSize, buffer_usage : Vk.BufferUsageFlags, memory_property_flags : Vk.MemoryPropertyFlags) -> Buffer_With_Memory, Vk.Result {
+buffer_with_memory_make :: (size : Vk.DeviceSize, usage : Vk.BufferUsageFlags, memory_property_flags : Vk.MemoryPropertyFlags) -> Buffer_With_Memory, Vk.Result {
     device := context.vk.device.handle;
     buffer : Buffer_With_Memory;
     result : Vk.Result;
 
     buffer_ci := Vk.BufferCreateInfo.{
-        size        = buffer_size,
-        usage       = buffer_usage,
+        size        = size,
+        usage       = usage,
         sharingMode = .EXCLUSIVE
     };
 
@@ -149,20 +143,30 @@ buffer_with_memory_destroy :: (buffer : Buffer_With_Memory) {
     Vk.DestroyBuffer(context.vk.device.handle, buffer.buffer, null);
 }
 
-image_with_memory_make :: (image_width : u32, image_height : u32, image_format : Vk.Format, image_tiling : Vk.ImageTiling, image_usage : Vk.ImageUsageFlags, memory_property_flags : Vk.MemoryPropertyFlags) -> Image, Vk.Result {
+// -------------------------------------------------------
+
+Image :: struct {
+    image   : Vk.Image;
+    view    : Vk.ImageView;
+    memory  : Vk.DeviceMemory;
+
+    format : Vk.Format;
+}
+
+image_make :: (width : u32, height : u32, format : Vk.Format, tiling : Vk.ImageTiling, usage : Vk.ImageUsageFlags, memory_property_flags : Vk.MemoryPropertyFlags) -> Image, Vk.Result {
     device := context.vk.device.handle;
     image  : Image;
     result : Vk.Result;
 
     image_ci := Vk.ImageCreateInfo.{
         imageType     = ._2D,
-        extent        = .{ width = image_width, height = image_height, depth = 1 },
+        extent        = .{ width = width, height = height, depth = 1 },
         mipLevels     = 1,
         arrayLayers   = 1,
-        format        = image_format,
-        tiling        = image_tiling,
+        format        = format,
+        tiling        = tiling,
         initialLayout = .UNDEFINED,
-        usage         = image_usage,
+        usage         = usage,
         sharingMode   = .EXCLUSIVE,
         samples       = ._1,
         flags         = 0,
@@ -171,6 +175,8 @@ image_with_memory_make :: (image_width : u32, image_height : u32, image_format :
     image.image, result = Vk.create_image(device, *image_ci);
     log_trace("Create image = %", result);
     if result != .SUCCESS then return .{}, result;
+
+    image.format = format;
 
     image_mem_reqs    := Vk.get_image_memory_requirements(device, image.image);
     memory_type_index := get_memory_type_index(memory_property_flags, image_mem_reqs.memoryTypeBits);
@@ -186,9 +192,33 @@ image_with_memory_make :: (image_width : u32, image_height : u32, image_format :
     return image, result;
 }
 
-image_with_memory_destroy :: (image : Image) {
+image_view_make :: (image : *Image, aspect_flags : Vk.ImageAspectFlags) -> Vk.Result {
+    view_ci := Vk.ImageViewCreateInfo.{
+        image            = image.image,
+        viewType         = ._2D,
+        format           = image.format,
+        components       = .{ r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY },
+        subresourceRange = .{
+            aspectMask     = aspect_flags,
+            baseMipLevel   = 0,
+            levelCount     = 1,
+            baseArrayLayer = 0,
+            layerCount     = 1,
+        },
+    };
+
+    view, result := Vk.create_image_view(context.vk.device.handle, *view_ci);
+    log_trace("Create image view = %", result);
+    if result != .SUCCESS then return result;
+
+    image.view = view;
+    return result;
+}
+
+image_destroy :: (image : Image) {
     Vk.free_memory(context.vk.device.handle, image.memory);
     Vk.DestroyImage(context.vk.device.handle, image.image, null);
+    Vk.DestroyImageView(context.vk.device.handle, image.view, null);
 }
 
 // -------------------------------------------------------
@@ -215,27 +245,39 @@ render_pass_make :: (device : Device, surface : Surface) -> Render_Pass {
             initialLayout  = .UNDEFINED,
             finalLayout    = .PRESENT_SRC_KHR,
         },
+        .{
+            format         = device.depth_format,
+            samples        = ._1,
+            loadOp         = .CLEAR,
+            storeOp        = .DONT_CARE,
+            stencilLoadOp  = .DONT_CARE,
+            stencilStoreOp = .DONT_CARE,
+            initialLayout  = .UNDEFINED,
+            finalLayout    = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        },
     ];
 
     rp_color_attachment_refs := Vk.AttachmentReference.[
         .{ attachment = 0, layout = .COLOR_ATTACHMENT_OPTIMAL },
     ];
+    rp_depth_attachment_ref := Vk.AttachmentReference.{ attachment = 1, layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
     rp_subpasses := Vk.SubpassDescription.[
         .{
-            pipelineBindPoint    = .GRAPHICS,
-            colorAttachmentCount = rp_color_attachment_refs.count,
-            pColorAttachments    = rp_color_attachment_refs.data,
+            pipelineBindPoint       = .GRAPHICS,
+            colorAttachmentCount    = rp_color_attachment_refs.count,
+            pColorAttachments       = rp_color_attachment_refs.data,
+            pDepthStencilAttachment = *rp_depth_attachment_ref,
         },
     ];
     rp_subpass_dependencies := Vk.SubpassDependency.[
         .{
             srcSubpass    = Vk.SUBPASS_EXTERNAL,
             dstSubpass    = 0,
-            srcStageMask  = .COLOR_ATTACHMENT_OUTPUT,
-            dstStageMask  = .COLOR_ATTACHMENT_OUTPUT,
+            srcStageMask  = .COLOR_ATTACHMENT_OUTPUT | .EARLY_FRAGMENT_TESTS,
+            dstStageMask  = .COLOR_ATTACHMENT_OUTPUT | .EARLY_FRAGMENT_TESTS,
             srcAccessMask = 0,
-            dstAccessMask = .COLOR_ATTACHMENT_WRITE,
+            dstAccessMask = .COLOR_ATTACHMENT_WRITE | .DEPTH_STENCIL_ATTACHMENT_WRITE,
         },
     ];
 
@@ -267,16 +309,15 @@ Swapchain :: struct {
     image_views  : []Vk.ImageView;
     framebuffers : []Vk.Framebuffer;
 
-    depth_image      : Image;
-    depth_image_view : Vk.ImageView;
+    depth_image : Image;
 }
 
 swapchain_make :: (width : int, height : int) {
     log_debug("Creating swapchain...");
     log_indent_scope();
 
-    device := context.vk.device;
-    surface := context.vk.surface;
+    device  := *context.vk.device;
+    surface := *context.vk.surface;
 
     swapchain : Swapchain;
 
@@ -334,6 +375,13 @@ swapchain_make :: (width : int, height : int) {
     swapchain.handle, _ = Vk.create_swapchain(device.handle, *swapchain_ci);
     log_trace("Create swapchain = %%");
 
+    log_trace("Creating depth image...");
+    {
+        log_indent_scope();
+        swapchain.depth_image, _ = image_make(swapchain.width, swapchain.height, device.depth_format, .OPTIMAL, .DEPTH_STENCIL_ATTACHMENT, .DEVICE_LOCAL);
+        image_view_make(*swapchain.depth_image, .DEPTH);
+    }
+
     swapchain_images, _   := Vk.get_swapchain_images(device.handle, swapchain.handle);
     swapchain.image_views  = NewArray(swapchain_images.count, Vk.ImageView);
     swapchain.framebuffers = NewArray(swapchain_images.count, Vk.Framebuffer);
@@ -360,32 +408,21 @@ swapchain_make :: (width : int, height : int) {
         log_trace("Create image view = %%");
         swapchain.image_views[it_index] = image_view;
 
+        attachments := Vk.ImageView.[image_view, swapchain.depth_image.view];
+        assert(attachments.count == context.vk.render_pass.attachments.count);
+
         framebuffer_ci := Vk.FramebufferCreateInfo.{
             renderPass      = context.vk.render_pass.handle,
-            attachmentCount = cast(u32) context.vk.render_pass.attachments.count,
-            pAttachments    = *image_view,
+            attachmentCount = cast(u32) attachments.count,
+            pAttachments    = attachments.data,
             width           = swapchain.width,
             height          = swapchain.height,
             layers          = 1,
         };
 
-        swapchain.framebuffers[it_index], _ = Vk.create_framebuffer(context.vk.device.handle, *framebuffer_ci);
+        swapchain.framebuffers[it_index], _ = Vk.create_framebuffer(device.handle, *framebuffer_ci);
         log_trace("Create framebuffer = %%");
     }
-
-    // @Todo: create depth image
-    // depth_format_candidates := Vk.Format.[.D32_SFLOAT, .D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT];
-    // for depth_format_candidates {
-    //     format_properties := Vk.get_physical_device_format_properties(device.physical_device, it);
-    //     if format_properties.optimalTilingFeatures & .DEPTH_STENCIL_ATTACHMENT == .DEPTH_STENCIL_ATTACHMENT {
-    //         device.depth_format = it;
-    //         break;
-    //     }
-    //     else if format_properties.linearTilingFeatures & .DEPTH_STENCIL_ATTACHMENT == .DEPTH_STENCIL_ATTACHMENT {
-    //         device.depth_format = it;
-    //         break;
-    //     }
-    // }
 
     context.vk.swapchain = swapchain;
 }
@@ -399,7 +436,7 @@ swapchain_destroy :: () {
     for context.vk.swapchain.framebuffers  Vk.DestroyFramebuffer(context.vk.device.handle, it, null);
     array_free(context.vk.swapchain.framebuffers);
 
-    // @Todo: delete depth image
+    image_destroy(context.vk.swapchain.depth_image);
 
     Vk.DestroySwapchainKHR(context.vk.device.handle, context.vk.swapchain.handle, null);
 }

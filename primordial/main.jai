@@ -11,7 +11,7 @@
 
 window_width  := 800;
 window_height := 600;
-window_title  := "Vulkan";
+window_title  := #run tprint("Vulkan (%)", DRAW_CMD);
 
 // -------------------------------------------------------
 
@@ -29,34 +29,90 @@ Matrix_Uniforms :: struct {
 
 // -------------------------------------------------------
 
-// VERTICES :: Vertex.[
-//     .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 0.8, 0.2, 0.3 } },
-//     .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 0.8, 0.2, 0.3 } },
-//     .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 0.2, 0.8, 0.3 } },
-//     .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 0.2, 0.8, 0.3 } },
-//     .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 0.2, 0.3, 0.8 } },
-//     .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 0.2, 0.3, 0.8 } },
-//     .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 0.8, 0.7, 0.3 } },
-//     .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 0.8, 0.7, 0.3 } },
-// ];
-VERTICES :: Vertex.[
-    .{ position = .{ -0.5, -0.5, 0.0 }, color = .{ 0.8, 0.2, 0.3 }, uv = .{ 0.0, 1.0 } },
-    .{ position = .{  0.5, -0.5, 0.0 }, color = .{ 0.2, 0.8, 0.3 }, uv = .{ 0.0, 0.0 } },
-    .{ position = .{  0.5,  0.5, 0.0 }, color = .{ 0.2, 0.3, 0.8 }, uv = .{ 1.0, 0.0 } },
-    .{ position = .{ -0.5,  0.5, 0.0 }, color = .{ 0.8, 0.7, 0.3 }, uv = .{ 1.0, 1.0 } },
-];
-VERTICES_SIZE_BYTES :: size_of(type_of(VERTICES));
+DRAW_CMD : enum {
+    CmdDraw;
+    CmdDrawIndexed;
+} : .CmdDrawIndexed;
 
-// INDICES :: u32.[
-//     5, 7, 6, 6, 4, 5,
-//     7, 5, 3, 3, 1, 7,
-//     0, 1, 7, 7, 6, 0,
-//     1, 0, 2, 2, 3, 1,
-//     5, 3, 2, 2, 4, 5,
-//     4, 2, 0, 0, 6, 4,
-// ];
-INDICES :: u32.[0, 1, 2, 2, 3, 0];
-INDICES_SIZE_BYTES :: size_of(type_of(INDICES));
+#if DRAW_CMD == .CmdDraw {
+    VERTICES :: Vertex.[
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 1
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
+
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 7
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 8
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 9
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 8
+
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 12
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 12
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 13
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 14
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
+
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 15
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
+    ];
+
+    INDICES :: u32.[];
+}
+else #if DRAW_CMD == .CmdDrawIndexed {
+    VERTICES :: Vertex.[
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 1
+        .{ position = .{  0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 2
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 3
+        .{ position = .{ -0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 4
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 5
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 6
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 7
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 8
+        .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 9
+        .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 10
+        .{ position = .{  0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 0.0 } }, // 11
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 12
+        .{ position = .{  0.5, -0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 13
+        .{ position = .{  0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 1.0, 1.0 } }, // 14
+        .{ position = .{ -0.5,  0.5,  0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 15
+    ];
+
+    INDICES :: u32.[
+         0,  1,  2,  2,  3,  0,
+         4,  5,  6,  6,  7,  4,
+         8,  9, 10, 10,  4,  8,
+        11,  2, 12, 12, 13, 11,
+        10, 14,  5,  5,  4, 10,
+         3,  2, 11, 11, 15,  3,
+    ];
+}
+
+VERTICES_SIZE_BYTES :: size_of(type_of(VERTICES));
+INDICES_SIZE_BYTES  :: size_of(type_of(INDICES));
 
 // -------------------------------------------------------
 
@@ -65,7 +121,7 @@ MAX_FRAMES_IN_FLIGHT :: 2;
 // -------------------------------------------------------
 
 main :: () {
-    setup_context(highest_logger_level = .Trace);
+    setup_context(highest_logger_level = .Debug);
 
     // -------------------------------------------------------
     // @Note: Create window
@@ -397,11 +453,10 @@ main :: () {
 
     log_debug("Loading device proc addresses...");
     Vk.load_device_proc_addresses(context.vk.device.handle);
-    device := context.vk.device.handle;
 
-    gfx_queue      := Vk.get_device_queue(device, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Graphics], 0);
-    transfer_queue := Vk.get_device_queue(device, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Transfer], 0);
-    present_queue  := Vk.get_device_queue(device, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Present],  0);
+    gfx_queue      := Vk.get_device_queue(context.vk.device.handle, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Graphics], 0);
+    transfer_queue := Vk.get_device_queue(context.vk.device.handle, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Transfer], 0);
+    present_queue  := Vk.get_device_queue(context.vk.device.handle, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Present],  0);
 
     // -------------------------------------------------------
     // @Note: Get surface format from chosen physical device
@@ -422,6 +477,24 @@ main :: () {
         // @Note: If we can't find the preferred one then use the first available one
         if !found then context.vk.surface.format = pd_surface_formats[0];
         log_debug("Surface format: Format = % | Color space = %", context.vk.surface.format.format, context.vk.surface.format.colorSpace);
+    }
+
+    // -------------------------------------------------------
+    // @Note: Find best depth format
+    {
+        DEPTH_FORMATS :: Vk.Format.[.D32_SFLOAT, .D32_SFLOAT_S8_UINT, .D24_UNORM_S8_UINT];
+        for DEPTH_FORMATS {
+            format_properties := Vk.get_physical_device_format_properties(context.vk.device.physical_device, it);
+            if format_properties.optimalTilingFeatures & .DEPTH_STENCIL_ATTACHMENT == .DEPTH_STENCIL_ATTACHMENT {
+                context.vk.device.depth_format = it;
+                break;
+            }
+            else if format_properties.linearTilingFeatures & .DEPTH_STENCIL_ATTACHMENT == .DEPTH_STENCIL_ATTACHMENT {
+                context.vk.device.depth_format = it;
+                break;
+            }
+        }
+        log_debug("Depth image format: %", context.vk.device.depth_format);
     }
 
     // -------------------------------------------------------
@@ -452,9 +525,9 @@ main :: () {
         codeSize = cast(u64)  vert_shader_bin.count,
         pCode    = cast(*u32) vert_shader_bin.data,
     };
-    vert_shader_module, _ := Vk.create_shader_module(device, *vert_shader_module_ci);
+    vert_shader_module, _ := Vk.create_shader_module(context.vk.device.handle, *vert_shader_module_ci);
     log_trace("Create shader module = %%");
-    defer Vk.DestroyShaderModule(device, vert_shader_module, null);
+    defer Vk.DestroyShaderModule(context.vk.device.handle, vert_shader_module, null);
     log_unindent();
 
     log_debug("Loading fragment shader...");
@@ -476,9 +549,9 @@ main :: () {
         codeSize = cast(u64)  frag_shader_bin.count,
         pCode    = cast(*u32) frag_shader_bin.data,
     };
-    frag_shader_module, _ := Vk.create_shader_module(device, *frag_shader_module_ci);
+    frag_shader_module, _ := Vk.create_shader_module(context.vk.device.handle, *frag_shader_module_ci);
     log_trace("Create shader module = %%");
-    defer Vk.DestroyShaderModule(device, frag_shader_module, null);
+    defer Vk.DestroyShaderModule(context.vk.device.handle, frag_shader_module, null);
     log_unindent();
 
 
@@ -522,7 +595,7 @@ main :: () {
 
     descriptor_set_layout, _ := Vk.create_descriptor_set_layout(context.vk.device.handle, *descriptor_set_layout_ci);
     log_trace("Create descriptor set layout = %%");
-    defer Vk.DestroyDescriptorSetLayout(device, descriptor_set_layout, null);
+    defer Vk.DestroyDescriptorSetLayout(context.vk.device.handle, descriptor_set_layout, null);
 
     // -------------------------------------------------------
     // @Note: Setup descriptor pool and descriptor sets
@@ -566,9 +639,9 @@ main :: () {
         pushConstantRangeCount = 0,
         pPushConstantRanges    = null,
     };
-    pipeline_layout, _ := Vk.create_pipeline_layout(device, *pipeline_layout_ci);
+    pipeline_layout, _ := Vk.create_pipeline_layout(context.vk.device.handle, *pipeline_layout_ci);
     log_trace("Create pipeline layout = %%");
-    defer Vk.DestroyPipelineLayout(device, pipeline_layout, null);
+    defer Vk.DestroyPipelineLayout(context.vk.device.handle, pipeline_layout, null);
 
     // -------------------------------------------------------
     // @Note: Setup pipeline fixed function state
@@ -609,7 +682,7 @@ main :: () {
         rasterizerDiscardEnable = .FALSE,
         polygonMode             = .FILL,
         lineWidth               = 1.0,
-        cullMode                = .BACK,
+        cullMode                = .NONE,
         frontFace               = .COUNTER_CLOCKWISE,
         depthBiasEnable         = .FALSE,
     };
@@ -644,12 +717,15 @@ main :: () {
     };
 
     depth_stencil_state_ci := Vk.PipelineDepthStencilStateCreateInfo.{
-        depthTestEnable       = .FALSE,
-        depthWriteEnable      = .FALSE,
+        depthTestEnable       = .TRUE,
+        depthWriteEnable      = .TRUE,
+        depthCompareOp        = .LESS,
         depthBoundsTestEnable = .FALSE,
-        stencilTestEnable     = .FALSE,
         minDepthBounds        = 0.0,
         maxDepthBounds        = 1.0,
+        stencilTestEnable     = .FALSE,
+        front                 = .{},
+        back                  = .{},
     };
 
     // -------------------------------------------------------
@@ -674,9 +750,9 @@ main :: () {
         subpass    = 0,
     };
 
-    gfx_pipeline, _ := Vk.create_one_graphics_pipeline(device, *gfx_pipeline_ci);
+    gfx_pipeline, _ := Vk.create_one_graphics_pipeline(context.vk.device.handle, *gfx_pipeline_ci);
     log_trace("Create graphics pipeline = %%");
-    defer Vk.DestroyPipeline(device, gfx_pipeline, null);
+    defer Vk.DestroyPipeline(context.vk.device.handle, gfx_pipeline, null);
 
     // -------------------------------------------------------
     // @Note: Setup command pools
@@ -685,17 +761,17 @@ main :: () {
         flags            = .RESET_COMMAND_BUFFER,
         queueFamilyIndex = context.vk.device.queue_family_indices[Queue_Family_Index_Type.Graphics],
     };
-    gfx_cmdpool, _ := Vk.create_command_pool(device, *gfx_cmdpool_ci);
+    gfx_cmdpool, _ := Vk.create_command_pool(context.vk.device.handle, *gfx_cmdpool_ci);
     log_trace("Create graphics command pool = %%");
-    defer Vk.DestroyCommandPool(device, gfx_cmdpool, null);
+    defer Vk.DestroyCommandPool(context.vk.device.handle, gfx_cmdpool, null);
 
     transfer_cmdpool_ci := Vk.CommandPoolCreateInfo.{
         flags            = .RESET_COMMAND_BUFFER,
         queueFamilyIndex = context.vk.device.queue_family_indices[Queue_Family_Index_Type.Transfer],
     };
-    transfer_cmdpool, _ := Vk.create_command_pool(device, *transfer_cmdpool_ci);
+    transfer_cmdpool, _ := Vk.create_command_pool(context.vk.device.handle, *transfer_cmdpool_ci);
     log_trace("Create transfer command pool = %%");
-    defer Vk.DestroyCommandPool(device, transfer_cmdpool, null);
+    defer Vk.DestroyCommandPool(context.vk.device.handle, transfer_cmdpool, null);
 
     // -------------------------------------------------------
     // @Note: Setup graphics and transfer command buffers
@@ -706,14 +782,14 @@ main :: () {
         commandBufferCount = MAX_FRAMES_IN_FLIGHT,
     };
 
-    gfx_cmdbufs, _ := Vk.allocate_command_buffers(device, *gfx_cmdbuf_ai);
+    gfx_cmdbufs, _ := Vk.allocate_command_buffers(context.vk.device.handle, *gfx_cmdbuf_ai);
     log_trace("Allocate graphics command buffers = %%");
 
     transfer_cmdbuf_ai := Vk.CommandBufferAllocateInfo.{
         commandPool = transfer_cmdpool,
         level       = .PRIMARY,
     };
-    transfer_cmdbuf, _ := Vk.allocate_one_command_buffer(device, *transfer_cmdbuf_ai);
+    transfer_cmdbuf, _ := Vk.allocate_one_command_buffer(context.vk.device.handle, *transfer_cmdbuf_ai);
     log_trace("Allocate transfer command buffer = %%");
 
     // -------------------------------------------------------
@@ -739,8 +815,9 @@ main :: () {
         );
     }
 
-    texture_image, _ := image_with_memory_make(image_width, image_height, .R8G8B8A8_SRGB, .OPTIMAL, .TRANSFER_DST | .SAMPLED, .DEVICE_LOCAL);
-    defer image_with_memory_destroy(texture_image);
+    texture_image, _ := image_make(image_width, image_height, .R8G8B8A8_UNORM, .OPTIMAL, .TRANSFER_DST | .SAMPLED, .DEVICE_LOCAL);
+    image_view_make(*texture_image, .COLOR);
+    defer image_destroy(texture_image);
     {
         log_trace("Copying image memory from buffer...");
         log_indent_scope();
@@ -834,24 +911,7 @@ main :: () {
     stbi_image_free(image_pixels);
 
     // -------------------------------------------------------
-    // @Note: Create texture image view and sampler
-
-    texture_view_ci := Vk.ImageViewCreateInfo.{
-        image            = texture_image.image,
-        viewType         = ._2D,
-        format           = .R8G8B8A8_UNORM,
-        components       = .{ r = .IDENTITY, g = .IDENTITY, b = .IDENTITY, a = .IDENTITY },
-        subresourceRange = .{
-            aspectMask     = .COLOR,
-            baseMipLevel   = 0,
-            levelCount     = 1,
-            baseArrayLayer = 0,
-            layerCount     = 1,
-        },
-    };
-    texture_view, _ := Vk.create_image_view(context.vk.device.handle, *texture_view_ci);
-    log_trace("Create texture image view = %%");
-    defer Vk.DestroyImageView(context.vk.device.handle, texture_view, null);
+    // @Note: Create texture sampler
 
     texture_sampler_ci := Vk.SamplerCreateInfo.{
         magFilter               = .LINEAR,
@@ -892,10 +952,10 @@ main :: () {
         defer buffer_with_memory_destroy(staging_buf_mem);
 
         // @Note: Copy vertices data to staging buffer
-        staging_data, _ := Vk.map_memory(device, staging_buf_mem.memory, offset = 0, size = VERTICES_SIZE_BYTES);
+        staging_data, _ := Vk.map_memory(context.vk.device.handle, staging_buf_mem.memory, offset = 0, size = VERTICES_SIZE_BYTES);
         log_trace("Map staging buffer memory = %%");
         mem_copy(staging_data, VERTICES.data, VERTICES_SIZE_BYTES);
-        Vk.unmap_memory(device, staging_buf_mem.memory);
+        Vk.unmap_memory(context.vk.device.handle, staging_buf_mem.memory);
 
         // @Note: Perform BufferCopy from staging buffer to device buffer
         _ := Vk.ResetCommandBuffer(transfer_cmdbuf, 0);
@@ -937,10 +997,10 @@ main :: () {
         defer buffer_with_memory_destroy(staging_buf_mem);
 
         // @Note: Copy indices data to staging buffer
-        staging_data, _ := Vk.map_memory(device, staging_buf_mem.memory, offset = 0, size = INDICES_SIZE_BYTES);
+        staging_data, _ := Vk.map_memory(context.vk.device.handle, staging_buf_mem.memory, offset = 0, size = INDICES_SIZE_BYTES);
         log_trace("Map staging buffer memory = %%");
         mem_copy(staging_data, INDICES.data, INDICES_SIZE_BYTES);
-        Vk.unmap_memory(device, staging_buf_mem.memory);
+        Vk.unmap_memory(context.vk.device.handle, staging_buf_mem.memory);
 
         // @Note: Perform BufferCopy from staging buffer to device buffer
         _ := Vk.ResetCommandBuffer(transfer_cmdbuf, 0);
@@ -1016,7 +1076,7 @@ main :: () {
 
                     image_info := Vk.DescriptorImageInfo.{
                         imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-                        imageView   = texture_view,
+                        imageView   = texture_image.view,
                         sampler     = texture_sampler,
                     };
 
@@ -1075,14 +1135,15 @@ main :: () {
     start_time        := get_time();
     current_time      : float64;
 
-    camera_pos     := Vector3.{0, 0, 2};
+    camera_pos     := Vector3.{0, 2, 2};
     camera_forward := normalize(.{0, 0, 0} - camera_pos);
-    camera_left    := normalize(cross_product(.{0, 0, 1}, camera_forward));
+    camera_left    := normalize(cross_product(.{0, 1, 0}, camera_forward));
     camera_up      := cross_product(camera_forward, camera_left);
-    camera_speed   := 0.1;
+    camera_speed   := 0.05;
 
     while main_loop := true {
         swapchain := *context.vk.swapchain;
+        device    := context.vk.device.handle;
 
         current_time = get_time();
         dt := current_time - start_time;
@@ -1167,7 +1228,8 @@ main :: () {
         _ := Vk.BeginCommandBuffer(cmdbuf, *Vk.CommandBufferBeginInfo.{});
         {
             CLEAR_VALUES :: Vk.ClearValue.[
-                .{ color = .{ _float32 = .[0.2, 0.3, 0.3, 1.0] } },
+                .{ color        = .{ _float32 = .[0.2, 0.3, 0.3, 1.0] } },
+                .{ depthStencil = .{ 1.0, 0 } },
             ];
             render_rect := Vk.Rect2D.{ offset = .{0, 0}, extent = swapchain.extent };
 
@@ -1206,7 +1268,12 @@ main :: () {
                 Vk.cmd_bind_index_buffer(cmdbuf, index_buffer.buffer);
                 Vk.cmd_bind_one_descriptor_set(cmdbuf, .GRAPHICS, pipeline_layout, descriptor_sets[current_frame_idx]);
 
-                Vk.cmd_draw_indexed(cmdbuf, INDICES.count);
+                #if DRAW_CMD == .CmdDraw {
+                    Vk.cmd_draw(cmdbuf, VERTICES.count);
+                }
+                else #if DRAW_CMD == .CmdDrawIndexed {
+                    Vk.cmd_draw_indexed(cmdbuf, INDICES.count);
+                }
             }
             Vk.CmdEndRenderPass(cmdbuf);
 
@@ -1219,23 +1286,9 @@ main :: () {
         aspect := cast(float) swapchain.width / swapchain.height;
 
         q : Quaternion;
-        set_from_axis_and_angle(*q, .{0, 0, 1}, cast(float) (current_time * (PI / 2))); // @Note: Radians
+        set_from_axis_and_angle(*q, .{1.0, 0.3, 0.5}, cast(float) (current_time * 90 * (PI / 180))); // @Note: Radians
 
-        perspective_lh_zo :: (fov_y : float, aspect : float, near : float, far : float) -> Matrix4 {
-            // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_clip_space.inl#L265-L278
-            tan_half_fov_y := tan(fov_y * 0.5);
-
-            result : Matrix4;
-            result._11 = 1.0 / (aspect * tan_half_fov_y);
-            result._22 = 1.0 / (tan_half_fov_y);
-            result._33 = far / (far - near);
-            result._34 = 1.0;
-            result._43 = -(far * near) / (far - near);
-
-            return result;
-        }
-
-        look_at_lh :: (eye : Vector3, center : Vector3, up_ref := Vector3.{0, 1, 0}) -> Matrix4 {
+        look_at :: (eye : Vector3, center : Vector3, up_ref := Vector3.{0, 1, 0}) -> Matrix4 {
             // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_transform.inl#L176-L196
             forward := normalize(center - eye);
             left    := normalize(cross_product(up_ref, forward));
@@ -1249,10 +1302,24 @@ main :: () {
             return result;
         }
 
+        perspective :: (fov_y : float, aspect : float, near : float, far : float) -> Matrix4 {
+            // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_clip_space.inl#L265-L278
+            tan_half_fov_y := tan(fov_y * 0.5);
+
+            result : Matrix4;
+            result._11 = 1.0 / (aspect * tan_half_fov_y);
+            result._22 = -1.0 / (tan_half_fov_y);    // @Note: normally this would be positive but Vulkan is stupid and flips the y
+            result._33 = far / (far - near);
+            result._34 = 1.0;
+            result._43 = -(far * near) / (far - near);
+
+            return result;
+        }
+
         matrix_uniforms := Matrix_Uniforms.{
-            model = rotation_matrix(Matrix4, q),
-            view  = look_at_lh(camera_pos, camera_forward),
-            proj  = perspective_lh_zo(45.0 * (PI / 2), aspect, 0.1, 100.0),
+            model = rotate(Matrix4_Identity, q) * translate(Matrix4_Identity, .{0, 0, 0}),
+            view  = look_at(camera_pos, camera_forward),
+            proj  = perspective(60.0 * (PI / 180), aspect, 0.1, 10.0),
         };
         mem_copy(matrix_uniform_buffers[current_frame_idx].mapped, *matrix_uniforms, size_of(Matrix_Uniforms));
 
@@ -1294,7 +1361,7 @@ main :: () {
     }
 
     // @Note: Let the device finish any remaning operations before cleaning up resources
-    _ := Vk.DeviceWaitIdle(device);
+    _ := Vk.DeviceWaitIdle(context.vk.device.handle);
 }
 
 // -------------------------------------------------------
