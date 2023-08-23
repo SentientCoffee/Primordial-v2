@@ -14,7 +14,13 @@ layout(location = 0) out vec3 o_color;
 layout(location = 1) out vec2 o_uv;
 
 void main() {
-    gl_Position = u_mtx.proj * u_mtx.view * u_mtx.model * vec4(i_position, 1.0);
+    int row = gl_InstanceIndex / 5;
+    int col = gl_InstanceIndex % 5;
+
+    float x = i_position.x + (row - 2) * 1.5;
+    float y = i_position.y + (col - 2) * 1.5;
+
+    gl_Position = u_mtx.proj * u_mtx.view * u_mtx.model * vec4(x, y, i_position.z, 1.0);
     o_color = i_color;
     o_uv = i_uv;
 }

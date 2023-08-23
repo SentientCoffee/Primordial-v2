@@ -31,10 +31,12 @@ Matrix_Uniforms :: struct {
 
 DRAW_CMD : enum {
     CmdDraw;
+    CmdDrawInstanced;
     CmdDrawIndexed;
-} : .CmdDrawIndexed;
+    CmdDrawIndexedInstanced;
+} : .CmdDrawInstanced;
 
-#if DRAW_CMD == .CmdDraw {
+#if DRAW_CMD == .CmdDraw || DRAW_CMD == .CmdDrawInstanced {
     VERTICES :: Vertex.[
         .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
         .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 1
@@ -81,7 +83,7 @@ DRAW_CMD : enum {
 
     INDICES :: u32.[0];
 }
-else #if DRAW_CMD == .CmdDrawIndexed {
+else #if DRAW_CMD == .CmdDrawIndexed || DRAW_CMD == .CmdDrawIndexedInstanced {
     VERTICES :: Vertex.[
         .{ position = .{ -0.5,  0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 0.0 } }, // 0
         .{ position = .{ -0.5, -0.5, -0.5 }, color = .{ 1.0, 1.0, 1.0 }, uv = .{ 0.0, 1.0 } }, // 1
@@ -523,10 +525,10 @@ main :: () {
     log_indent();
     vert_shader_bin : string;
     {
-        shader_name :: "triangle.glsl.vert";
+        shader_name :: "triangle.vert";
 
-        shader_path, success := table_find(*shader_table, shader_name);
-        assert(success, "Could not find shader \"%\" in shader table!", shader_name);
+        shader_path, success := table_find(*asset_table, shader_name);
+        assert(success, "Could not find shader \"%\" in asset table!", shader_name);
         log_debug("Loading shader binary \"%\" (\"%\")", shader_name, shader_path);
 
         vert_shader_bin, success = read_entire_file(shader_path);
@@ -547,10 +549,10 @@ main :: () {
     log_indent();
     frag_shader_bin : string;
     {
-        shader_name :: "triangle.glsl.frag";
+        shader_name :: "triangle.frag";
 
-        shader_path, success := table_find(*shader_table, "triangle.glsl.frag");
-        assert(success, "Could not find shader \"%\" in shader table!", shader_name);
+        shader_path, success := table_find(*asset_table, shader_name);
+        assert(success, "Could not find shader \"%\" in asset table!", shader_name);
         log_debug("Loading shader binary \"%\" (\"%\")", shader_name, shader_path);
 
         frag_shader_bin, success = read_entire_file(shader_path);
@@ -671,9 +673,17 @@ main :: () {
         pScissors     = null,
     };
 
-    vertex_input_binding_descs := Vk.VertexInputBindingDescription.[
-        .{ binding = 0, stride = size_of(Vertex), inputRate = .VERTEX },
-    ];
+    // #if DRAW_CMD == .CmdDrawInstanced || DRAW_CMD == .CmdDrawIndexedInstanced {
+    //     vertex_input_binding_descs := Vk.VertexInputBindingDescription.[
+    //         .{ binding = 0, stride = size_of(Vertex), inputRate = .VERTEX },
+    //         .{ binding = 0, stride = size_of(Vertex), inputRate = .INSTANCE },
+    //     ];
+    // }
+    // else {
+        vertex_input_binding_descs := Vk.VertexInputBindingDescription.[
+            .{ binding = 0, stride = size_of(Vertex), inputRate = .VERTEX },
+        ];
+    // }
     vertex_input_attribute_descs := Vk.VertexInputAttributeDescription.[
         .{ binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "position") },
         .{ binding = 0, location = 1, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "color"   ) },
@@ -816,8 +826,8 @@ main :: () {
     {
         image_name :: "container";
 
-        image_path, success := table_find(*texture_table, image_name);
-        assert(success, "Could not find texture \"%\" in texture table!", image_name);
+        image_path, success := table_find(*asset_table, image_name);
+        assert(success, "Could not find texture \"%\" in asset table!", image_name);
         log_debug("Loading image \"%\" (\"%\")", image_name, image_path);
 
         image_pixels, image_width, image_height = image_load(image_path);
@@ -1148,12 +1158,7 @@ main :: () {
     start_time        := get_time();
     current_time      : float64;
 
-    camera_pos     := Vector3.{0, 2, 2};
-    camera_forward := normalize(camera_pos - .{0, 0, 0});
-    camera_right   := normalize(cross_product(.{0, 1, 0}, camera_forward));
-    camera_up      := cross_product(camera_forward, camera_right);
-    camera_speed   := 0.02;
-    camera_fov     := 70.0;
+    camera := camera_make(.{0, 4, 4}, .{0, 0, 0});
 
     while main_loop := true {
         swapchain := *context.vk.swapchain;
@@ -1200,20 +1205,21 @@ main :: () {
                     }
 
                 case .MOUSE_WHEEL;
-                    camera_fov -= cast(float) (it.wheel_delta/it.typical_wheel_delta * dt);
+                    camera.fov -= cast(Degrees) (it.wheel_delta / it.typical_wheel_delta) * 3;
+                    Clamp(*camera.fov, 30, 100);
             }
         }
 
         camera_pos_add := Vector3.{};
 
-        if Input.input_button_states[#char "W"] == .DOWN then camera_pos_add += -camera_forward;
-        if Input.input_button_states[#char "S"] == .DOWN then camera_pos_add +=  camera_forward;
-        if Input.input_button_states[#char "A"] == .DOWN then camera_pos_add +=  camera_right;
-        if Input.input_button_states[#char "D"] == .DOWN then camera_pos_add += -camera_right;
-        if Input.input_button_states[#char "Z"] == .DOWN then camera_pos_add +=  camera_up;
-        if Input.input_button_states[#char "X"] == .DOWN then camera_pos_add += -camera_up;
+        if Input.input_button_states[#char "W"] == .DOWN then camera_pos_add +=  camera.forward;
+        if Input.input_button_states[#char "S"] == .DOWN then camera_pos_add += -camera.forward;
+        if Input.input_button_states[#char "A"] == .DOWN then camera_pos_add +=  camera.right;
+        if Input.input_button_states[#char "D"] == .DOWN then camera_pos_add += -camera.right;
+        if Input.input_button_states[#char "Z"] == .DOWN then camera_pos_add +=  camera.up;
+        if Input.input_button_states[#char "X"] == .DOWN then camera_pos_add += -camera.up;
 
-        camera_pos += camera_pos_add * camera_speed * dt;
+        camera.position += camera_pos_add * camera.speed * dt;
 
         // -------------------------------------------------------
 
@@ -1289,8 +1295,14 @@ main :: () {
                 #if DRAW_CMD == .CmdDraw {
                     Vk.cmd_draw(cmdbuf, VERTICES.count);
                 }
+                else #if DRAW_CMD == .CmdDrawInstanced {
+                    Vk.cmd_draw(cmdbuf, VERTICES.count, instance_count = 25);
+                }
                 else #if DRAW_CMD == .CmdDrawIndexed {
                     Vk.cmd_draw_indexed(cmdbuf, INDICES.count);
+                }
+                else #if DRAW_CMD == .CmdDrawIndexedInstanced {
+                    Vk.cmd_draw_indexed(cmdbuf, INDICES.count, instance_count = 25);
                 }
             }
             Vk.CmdEndRenderPass(cmdbuf);
@@ -1304,40 +1316,12 @@ main :: () {
         aspect := cast(float) swapchain.width / swapchain.height;
 
         q : Quaternion;
-        set_from_axis_and_angle(*q, .{1.0, 0.3, 0.5}, cast(float) (current_time * 90 * (PI / 180))); // @Note: Radians
-
-        look_at :: (eye : Vector3, center : Vector3, up_ref := Vector3.{0, 1, 0}) -> Matrix4 {
-            // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_transform.inl#L176-L196
-            forward := normalize(eye - center);
-            right   := normalize(cross_product(up_ref, forward));
-            up      := cross_product(forward, right);
-
-            result := make_matrix_from_columns(right, up, forward);
-            result._41 = -dot_product(right, eye);
-            result._42 = -dot_product(up, eye);
-            result._43 = -dot_product(forward, eye);
-
-            return result;
-        }
-
-        perspective :: (fov_y : float, aspect : float, near : float, far : float) -> Matrix4 {
-            // @Note: https://github.com/g-truc/glm/blob/master/glm/ext/matrix_clip_space.inl#L265-L278
-            tan_half_fov_y := tan(fov_y * 0.5);
-
-            result : Matrix4;
-            result._11 = 1.0 / (aspect * tan_half_fov_y);
-            result._22 = -1.0 / (tan_half_fov_y);    // @Note: normally this would be positive but Vulkan is stupid and flips the y
-            result._33 = far / (far - near);
-            result._34 = 1.0;
-            result._43 = -(far * near) / (far - near);
-
-            return result;
-        }
+        set_from_axis_and_angle(*q, .{0.5, 1.0, 0.5}, cast(float) (current_time * radians(90))); // @Note: Radians
 
         matrix_uniforms := Matrix_Uniforms.{
             model = rotate(Matrix4_Identity, q) * translate(Matrix4_Identity, .{0, 0, 0}),
-            view  = look_at(camera_pos, camera_pos + camera_forward),
-            proj  = perspective(camera_fov * (PI / 180), aspect, 0.1, 100.0),
+            view  = look_at(camera),
+            proj  = perspective(radians(camera.fov), aspect, 0.1, 100.0),
         };
         mem_copy(matrix_uniform_buffers[current_frame_idx].mapped, *matrix_uniforms, size_of(Matrix_Uniforms));
 
@@ -1384,12 +1368,11 @@ main :: () {
 
 // -------------------------------------------------------
 
-// @Note: see assets/shaders/_generated_*_table.jai
-#placeholder shader_table;
-#placeholder texture_table;
+#placeholder asset_table;
 
 // -------------------------------------------------------
 
+#load "camera.jai";
 #load "context.jai";
 #load "utils.jai";
 #load "vulkan.jai";

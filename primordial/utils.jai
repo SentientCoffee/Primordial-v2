@@ -58,15 +58,28 @@ range :: ($lower : T, $upper : $T) -> [upper - lower]T #expand {
 
 // -------------------------------------------------------
 
+Radians :: #type,isa float;
+Degrees :: #type,isa float;
+
+radians :: inline (degrees : Degrees) -> Radians {
+    return cast(Radians) (degrees * PI / 180.0);
+}
+
+degrees :: inline (radians : Radians) -> Degrees {
+    return cast(Degrees) (radians * 180.0 / PI);
+}
+
+// -------------------------------------------------------
+
 image_load :: (path : string, required_channels : s32 = 4) -> *u8 #must, u32, u32, s32 {
     width, height, channels : s32;
     pixels := stbi_load(path.data, *width, *height, *channels, cast(s32) required_channels);
     return pixels, cast(u32) width, cast(u32) height, channels;
 }
 
-string_builder_make :: inline () -> String_Builder {
+string_builder_make :: inline (buffer_size := -1) -> String_Builder {
     b : String_Builder;
-    init_string_builder(*b);
+    string_builder_init(*b, buffer_size);
     return b;
 }
 
