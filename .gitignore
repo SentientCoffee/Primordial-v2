@@ -1,3 +1,4 @@
 **/.build/
 **/build/
+**/assets/_shader_cache
 *.rdbg

@@ -14,10 +14,11 @@
 
 MAIN_EXE_NAME :: "primordial";
 BUILD_DIR     :: "build";
-
-SHADER_CACHE_DIR :: "shader_cache";
+ASSET_DIR     :: "assets";
 
 MODULE_IMPORT_PATHS :: string.["modules"];
+
+SHADER_CACHE_DIR :: #run tprint("%/%", ASSET_DIR, "_shader_cache");
 
 DEBUG_SHADERCOMP_OUTPUT :: false;
 
@@ -49,8 +50,8 @@ build :: () {
     if file_exists(exe_path) then delete_directory(exe_path);
     make_directory_if_it_does_not_exist(exe_path, recursive = true);
 
-    shader_cache_path := tprint("%/%", BUILD_DIR, SHADER_CACHE_DIR);
-    make_directory_if_it_does_not_exist(shader_cache_path, recursive = true);
+    if shader_compile && file_exists(SHADER_CACHE_DIR) then delete_directory(SHADER_CACHE_DIR);
+    make_directory_if_it_does_not_exist(SHADER_CACHE_DIR, recursive = true);
 
     w_debug := compiler_create_workspace("Primordial debug");
     options := get_build_options(w_debug);
@@ -59,7 +60,7 @@ build :: () {
     options.output_path                         = exe_path;     // :InconsistentDirectoryMaking
     options.intermediate_path                   = tprint("%/_int", BUILD_DIR);
     options.output_executable_name              = tprint("%_d", MAIN_EXE_NAME);
-    options.backend                             = .X64;
+    options.backend                             = .LLVM;        // There's a bug with with isa types in the x64 backend, switch back when fixed
     options.use_natvis_compatible_types         = false;
     options.shorten_filenames_in_error_messages = true;
     options.text_output_flags                  &= ~.OUTPUT_LINK_LINE;
@@ -70,34 +71,38 @@ build :: () {
     // import_paths_to_check : [..]string;
     compiler_begin_intercept(w_debug);
     {
-        cached_build_string_path := tprint("%/_genereated_shader_table.jai", shader_cache_path);
-        shader_build_string : string;
+        // cached_build_string_path := tprint("%/_genereated_asset_table.jai", SHADER_CACHE_DIR);
 
-        if shader_compile {
-            write_strings("----------\n", "Compiling shaders:\n");
+        // if shader_compile {
+        //     write_strings("----------\n", "Compiling shaders:\n");
 
-            shader_build_string=, success := compile_shaders();
-            if !success {
-                compiler_set_workspace_status(.FAILED, w_debug);
-                return;
-            }
+        //     shader_build_string=, success := compile_shaders();
+        //     if !success {
+        //         compiler_set_workspace_status(.FAILED, w_debug);
+        //         return;
+        //     }
 
-            success = write_entire_file(cached_build_string_path, shader_build_string);
-            if !success {
-                compiler_report(tprint("Failed to write generated build string to \"%\"", cached_build_string_path), mode = .WARNING);
-            }
+        //     success = write_entire_file(cached_build_string_path, shader_build_string);
+        //     if !success {
+        //         compiler_report(tprint("Failed to write generated build string to \"%\"", cached_build_string_path), mode = .WARNING);
+        //     }
+        // }
+        // else {
+        //     shader_build_string=, success := read_entire_file(cached_build_string_path);
+        //     if !success {
+        //         compiler_report(tprint("Failed to read cached build string from \"%\"", cached_build_string_path));
+        //         return;
+        //     }
+        // }
+
+        // assert(shader_build_string != "", "Something went wrong and we got an empty shader_table build string.");
+
+        write_strings("----------\n", "Generating asset table:\n");
+        asset_table_string, success := generate_asset_table(shader_compile);
+        if !success {
+            compiler_set_workspace_status(.FAILED, w_debug);
+            return;
         }
-        else {
-            shader_build_string=, success := read_entire_file(cached_build_string_path);
-            if !success {
-                compiler_report(tprint("Failed to read cached build string from \"%\"", cached_build_string_path));
-                return;
-            }
-        }
-
-        assert(shader_build_string != "", "Something went wrong and we got an empty shader_table build string.");
-
-        texture_build_string := get_texture_table_string();
 
         write_string("----------\n");
         add_build_file("primordial/main.jai", w_debug);
@@ -125,8 +130,7 @@ build :: () {
                     if m.phase != .TYPECHECKED_ALL_WE_CAN then continue;
                     if build_strings_inserted then continue;
 
-                    add_build_string(shader\_build_string, w_debug);
-                    add_build_string(texture_build_string, w_debug);
+                    add_build_string(asset_table_string, w_debug);
                     build_strings_inserted = true;
 
                 case .COMPLETE;
@@ -169,52 +173,85 @@ build :: () {
 
 // -------------------------------------------------------
 
-get_texture_table_string :: () -> string {
+generate_asset_table :: (compile_shaders : bool) -> string, bool {
     find_images :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
         if !ends_with(info.short_name, ".png") return;
 
         new_info := info;
         basename := get_basename_and_path(info.short_name);
-
         new_info.full_name  = copy_string(info.full_name);
         new_info.short_name = copy_string(basename);
+
         array_add(user_data, new_info);
     }
 
-    images : [..]File_Visit_Info;
-    images.allocator = temp;
+    find_shader_binaries :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
+        if !ends_with(info.short_name, ".spv") return;
 
-    // @Todo: don't hardcode the directory
-    visit_files(dir_name = "assets/textures", recursive = true, user_data = *images, proc = find_images);
+        new_info := info;
+        basename := get_basename_and_path(info.short_name);
+        new_info.full_name  = copy_string(info.full_name);
+        new_info.short_name = copy_string(basename);
 
-    texture_table_string : String_Builder;
-    append(*texture_table_string, "texture_table :: #run -> Hash_Table(string, string) {\n");
-    append(*texture_table_string, "    table : Hash_Table(string, string);\n\n");
-    for images {
-        print_to_builder(*texture_table_string, "    table_add(*table, \"%\", \"%\");\n", it.short_name, it.full_name);
+        array_add(user_data, new_info);
     }
-    append(*texture_table_string, "\n");
-    append(*texture_table_string, "    return table;\n}\n");
 
-    return builder_to_string(*texture_table_string);
-}
+    find_shader_sources :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
+        if !ends_with(info.short_name, ".glsl") return;
 
-compile_shaders :: () -> string, bool {
-    outputs, success := compile_shader("triangle.glsl");      // @Todo: Recurse the assets/shaders file tree
-    if !success then return "", false;
+        new_info := info;
+        new_info.full_name  = copy_string(info.full_name);
+        new_info.short_name = copy_string(info.short_name);
 
-    shader_table_string : String_Builder;
-    append(*shader_table_string, "shader_table :: #run -> Hash_Table(string, string) {\n");
-    append(*shader_table_string, "    table : Hash_Table(string, string);\n\n");
-    append(*shader_table_string, "    // -------------------------------------------------------\n");
-    append(*shader_table_string, "    // triangle.glsl\n");
-    for outputs {
-        print_to_builder(*shader_table_string, "    table_add(*table, \"%\", \"%\");\n", it.name, it.path);
+        array_add(user_data, new_info);
     }
-    append(*shader_table_string, "\n");
-    append(*shader_table_string, "    return table;\n}\n");
 
-    return builder_to_string(*shader_table_string), true;
+    asset_table_string : String_Builder;
+    append(*asset_table_string, "asset_table :: #run -> Hash_Table(string, string) {\n");
+    append(*asset_table_string, "    table : Hash_Table(string, string);\n\n");
+
+    found : [..]File_Visit_Info;
+    defer array_free(found);
+    found.allocator = temp;
+
+    // @Note: Shaders
+    append(*asset_table_string, "    // -------------------------------------------------------\n");
+    append(*asset_table_string, "    // Shaders\n");
+    {
+        if compile_shaders {
+            visit_files(dir_name = tprint("%/shaders", ASSET_DIR), recursive = true, user_data = *found, proc = find_shader_sources);
+            for found {
+                outputs, success := compile_shader(it.full_name, SHADER_CACHE_DIR);
+                if !success then return "", false;
+                for o : outputs {
+                    print_to_builder(*asset_table_string, "    table_add(*table, \"%\", \"%\");\n", o.name, o.path);
+                }
+            }
+        }
+        else {
+            visit_files(dir_name = SHADER_CACHE_DIR, recursive = true, user_data = *found, proc = find_shader_binaries);
+            for found {
+                print_to_builder(*asset_table_string, "    table_add(*table, \"%\", \"%\");\n", it.short_name, it.full_name);
+            }
+        }
+    }
+    append(*asset_table_string, "\n");
+
+    array_reset_keeping_memory(*found);
+
+    // @Note: Textures
+    append(*asset_table_string, "    // -------------------------------------------------------\n");
+    append(*asset_table_string, "    // Textures\n");
+    {
+        visit_files(dir_name = tprint("%/textures", ASSET_DIR), recursive = true, user_data = *found, proc = find_images);
+        for found {
+            print_to_builder(*asset_table_string, "    table_add(*table, \"%\", \"%\");\n", it.short_name, it.full_name);
+        }
+    }
+    append(*asset_table_string, "\n");
+
+    append(*asset_table_string, "    return table;\n}\n");
+    return builder_to_string(*asset_table_string), true;
 }
 
 run :: () -> bool {
@@ -278,3 +315,4 @@ find_dlls :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
 #import "File_Utilities";
 #import "Process";
 #import "String";
+#import "System";

@@ -16,22 +16,23 @@ advance_string :: (s : *string, count : s64) #expand {
 
 // -------------------------------------------------------
 
-compile_shader :: (shader_name : string, path := "assets/shaders", output_shader_dir := "build/shader_cache") -> outputs : []Shader_Output, compiled : bool {
-    shader_path := tprint("%/%", path, shader_name);
-    shader_buf, ok := read_entire_file(shader_path);
+compile_shader :: (path : string, output_dir : string) -> outputs : []Shader_Output, compiled : bool {
+    shader_name := get_basename_and_path(path);
+
+    shader_buf, ok := read_entire_file(path);
     if !ok {
-        print("Failed to read file \"%\"!\n", shader_path);
+        print("Failed to read file \"%\"!\n", path);
         return .[], false;
     }
 
     all_shader_sources := get_shader_sources(shader_buf);
 
-    err := make_directory_if_it_does_not_exist(output_shader_dir); if !err {
-        print("Failed to make shader cache directory at \"%\"!\n", output_shader_dir);
+    err := make_directory_if_it_does_not_exist(output_dir); if !err {
+        print("Failed to make shader cache directory at \"%\"!\n", output_dir);
         return .[], false;
     }
 
-    shader_dir := tprint("%/%", output_shader_dir, shader_name);
+    shader_dir := tprint("%/%", output_dir, shader_name);
     err = make_directory_if_it_does_not_exist(shader_dir); if !err {
         print("Failed to make directory \"%\"!\n", shader_dir);
         return .[], false;
@@ -53,36 +54,51 @@ compile_shader :: (shader_name : string, path := "assets/shaders", output_shader
         assert(ext != "");
 
         shader_filename := tprint("%.%", shader_name, ext);
-        shader_path     := tprint("%/%", shader_dir, shader_filename);
-        spv_path        := tprint("%.spv", shader_path);
+        output_path     := tprint("%/%", shader_dir, shader_filename);
+        spv_path        := tprint("%.spv", output_path);
 
-        #if DEBUG_SHADERCOMP_OUTPUT then print("Dumping % shader to \"%\"...\n", type, shader_path);
-        file, ok := file_open(shader_path, for_writing = true);
-        defer file_close(*file);
+        #if DEBUG_SHADERCOMP_OUTPUT then print("Dumping % shader to \"%\"...\n", type, output_path);
+        file, ok := file_open(output_path, for_writing = true);
         if !ok {
-            print("Failed to open file \"%\" for writing!\n", shader_path);
+            print("Failed to open file \"%\" for writing!\n", output_path);
             return .[], false;
         }
 
         ok_1 := file_write(*file, "#version 450\n");
         ok_2 := file_write(*file, src);
 
+        file_close(*file);
+
         if !ok_1 || !ok_2 {
-            print("Failed to write file \"%\"!\n", shader_path);
+            print("Failed to write file \"%\"!\n", output_path);
             return .[], false;
         }
 
-        print("Compiling % shader \"%\"...\n", type, shader_filename);
-        glslc_cmd := tprint("glslc % -o %", shader_path, spv_path);
-        result := run_command(glslc_cmd, arg_quoting = .NEVER_QUOTE);
+        type_str := to_lower_copy(tprint("%", type));
+
+        print("Compiling % shader \"%\"...\n", type_str, shader_filename);
+        glslc_cmd := tprint("glslc \"%\" -o \"%\"", output_path, spv_path);
+        result, output, error := run_command(glslc_cmd, capture_and_return_output = true, arg_quoting = .NEVER_QUOTE);
         if result.type == .FAILED_TO_LAUNCH {
             print("Failed to run command \"%\"!\n", glslc_cmd);
             return .[], false;
         }
 
-        // @Todo: Handle compilation errors
+        if output then write_strings("\n", output, "\n");
+        if error  then write_strings("\n", error, "\n");
+
+        if result.type == .EXITED && result.exit_code != 0 {
+            print("'%' returned with exit code %.\n", glslc_cmd, result.exit_code);
+            return .[], false;
+        }
 
         array_add(*outputs, .{shader_filename, spv_path});
+
+        #if DEBUG_SHADERCOMP_OUTPUT then print("Deleting % shader at \"%\"...\n", type_str, output_path);
+        if !file_delete(output_path) {
+            error, desc := get_error_value_and_string();
+            print("Could not delete file at \"%\": % (Error code %)\n", output_path, desc, error);
+        }
     }
 
     // @Todo: copy shaders to output path
