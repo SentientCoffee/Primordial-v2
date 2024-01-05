@@ -150,7 +150,7 @@ buffer_with_memory_make :: (size : Vk.DeviceSize, usage : Vk.BufferUsageFlags, m
 
 buffer_with_memory_destroy :: (buffer : Buffer_With_Memory) {
     Vk.free_memory(context.vk.device.handle, buffer.memory);
-    Vk.DestroyBuffer(context.vk.device.handle, buffer.buffer, null);
+    Vk.destroy_buffer(context.vk.device.handle, buffer.buffer);
 }
 
 // -------------------------------------------------------
@@ -227,8 +227,8 @@ image_view_make :: (image : *Image, aspect_flags : Vk.ImageAspectFlags) -> Vk.Re
 
 image_destroy :: (image : Image) {
     Vk.free_memory(context.vk.device.handle, image.memory);
-    Vk.DestroyImage(context.vk.device.handle, image.image, null);
-    Vk.DestroyImageView(context.vk.device.handle, image.view, null);
+    Vk.destroy_image(context.vk.device.handle, image.image);
+    Vk.destroy_image_view(context.vk.device.handle, image.view);
 }
 
 // -------------------------------------------------------
@@ -306,7 +306,7 @@ render_pass_make :: (device : Device, surface : Surface) -> Render_Pass {
 }
 
 render_pass_destroy :: (device : Device, render_pass : Render_Pass) {
-    Vk.DestroyRenderPass(device.handle, render_pass.handle, null);
+    Vk.destroy_render_pass(device.handle, render_pass.handle);
 }
 
 // -------------------------------------------------------
@@ -440,15 +440,15 @@ swapchain_make :: (width : int, height : int) {
 swapchain_destroy :: () {
     Vk.DeviceWaitIdle(context.vk.device.handle);
 
-    for context.vk.swapchain.image_views   Vk.DestroyImageView(context.vk.device.handle, it, null);
+    for context.vk.swapchain.image_views   Vk.destroy_image_view(context.vk.device.handle, it);
     array_free(context.vk.swapchain.image_views);
 
-    for context.vk.swapchain.framebuffers  Vk.DestroyFramebuffer(context.vk.device.handle, it, null);
+    for context.vk.swapchain.framebuffers  Vk.destroy_framebuffer(context.vk.device.handle, it);
     array_free(context.vk.swapchain.framebuffers);
 
     image_destroy(context.vk.swapchain.depth_image);
 
-    Vk.DestroySwapchainKHR(context.vk.device.handle, context.vk.swapchain.handle, null);
+    Vk.destroy_swapchain(context.vk.device.handle, context.vk.swapchain.handle);
 }
 
 recreate_swapchain :: (width : int, height : int) {
@@ -491,9 +491,9 @@ frame_sync_make :: () -> Frame_Sync, Vk.Result {
 }
 
 frame_sync_destroy :: (using frame_sync : Frame_Sync) {
-    Vk.DestroySemaphore(context.vk.device.handle, swapchain_image_sem, null);
-    Vk.DestroySemaphore(context.vk.device.handle, render_finished_sem, null);
-    Vk.DestroyFence(context.vk.device.handle, in_flight_fence, null);
+    Vk.destroy_semaphore(context.vk.device.handle, swapchain_image_sem);
+    Vk.destroy_semaphore(context.vk.device.handle, render_finished_sem);
+    Vk.destroy_fence(context.vk.device.handle, in_flight_fence);
 }
 
 // -------------------------------------------------------

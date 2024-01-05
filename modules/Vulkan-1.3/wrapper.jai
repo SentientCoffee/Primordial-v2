@@ -160,6 +160,84 @@ create_swapchain :: (device : Device, create_info : *SwapchainCreateInfoKHR, all
 
 // -------------------------------------------------------
 
+destroy_buffer :: inline (device : Device, buffer : Buffer, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyBuffer(device, buffer, allocation_callbacks);
+}
+
+destroy_command_pool :: inline (device : Device, command_pool : CommandPool, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyCommandPool(device, command_pool, allocation_callbacks);
+}
+
+destroy_debug_utils_messenger :: inline (instance : Instance, debug_messenger : DebugUtilsMessengerEXT, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyDebugUtilsMessengerEXT(instance, debug_messenger, allocation_callbacks);
+}
+
+destroy_descriptor_pool :: inline (device : Device, descriptor_pool : DescriptorPool, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyDescriptorPool(device, descriptor_pool, allocation_callbacks);
+}
+
+destroy_descriptor_set_layout :: inline (device : Device, descriptor_set_layout : DescriptorSetLayout, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyDescriptorSetLayout(device, descriptor_set_layout, allocation_callbacks);
+}
+
+destroy_device :: inline (device : Device, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyDevice(device, allocation_callbacks);
+}
+
+destroy_fence :: inline (device : Device, fence : Fence, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyFence(device, fence, allocation_callbacks);
+}
+
+destroy_framebuffer :: inline (device : Device, framebuffer : Framebuffer, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyFramebuffer(device, framebuffer, allocation_callbacks);
+}
+
+destroy_image :: inline (device : Device, image : Image, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyImage(device, image, allocation_callbacks);
+}
+
+destroy_image_view :: inline (device : Device, image_view : ImageView, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyImageView(device, image_view, allocation_callbacks);
+}
+
+destroy_instance :: inline (instance : Instance, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyInstance(instance, allocation_callbacks);
+}
+
+destroy_pipeline :: inline (device : Device, pipeline : Pipeline, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyPipeline(device, pipeline, allocation_callbacks);
+}
+
+destroy_pipeline_layout :: inline (device : Device, pipeline_layout : PipelineLayout, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyPipelineLayout(device, pipeline_layout, allocation_callbacks);
+}
+
+destroy_render_pass :: inline (device : Device, render_pass : RenderPass, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyRenderPass(device, render_pass, allocation_callbacks);
+}
+
+destroy_sampler :: inline (device : Device, sampler : Sampler, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroySampler(device, sampler, allocation_callbacks);
+}
+
+destroy_semaphore :: inline (device : Device, semaphore : Semaphore, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroySemaphore(device, semaphore, allocation_callbacks);
+}
+
+destroy_shader_module :: inline (device : Device, shader_module : ShaderModule, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroyShaderModule(device, shader_module, allocation_callbacks);
+}
+
+destroy_surface :: inline (instance : Instance, surface : SurfaceKHR, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroySurfaceKHR(instance, surface, allocation_callbacks);
+}
+
+destroy_swapchain :: inline (device : Device, swapchain : SwapchainKHR, allocation_callbacks : *AllocationCallbacks = null) {
+    DestroySwapchainKHR(device, swapchain, allocation_callbacks);
+}
+
+// -------------------------------------------------------
+
 get_buffer_memory_requirements :: (device : Device, buffer : Buffer) -> MemoryRequirements {
     memory_requirements : MemoryRequirements;
     GetBufferMemoryRequirements(device, buffer, *memory_requirements);

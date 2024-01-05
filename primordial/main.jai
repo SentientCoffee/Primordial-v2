@@ -277,14 +277,14 @@ main :: () {
         context.vk.instance.handle = instance;
     }
 
-    defer Vk.DestroyInstance(context.vk.instance.handle, null);
+    defer Vk.destroy_instance(context.vk.instance.handle);
 
     log_debug("Loading instance proc addresses...");
     Vk.load_instance_proc_addresses(context.vk.instance.handle);
 
     debug_messenger, _ := Vk.create_debug_utils_messenger(context.vk.instance.handle, *debug_messenger_ci);
     log_trace("Create debug utils messenger = %%");
-    defer Vk.DestroyDebugUtilsMessengerEXT(context.vk.instance.handle, debug_messenger, null);
+    defer Vk.destroy_debug_utils_messenger(context.vk.instance.handle, debug_messenger);
 
     // -------------------------------------------------------
     // @Note: Create vulkan surface
@@ -312,7 +312,7 @@ main :: () {
         log_trace("Create Xlib surface = %%");
         context.vk.surface.handle = surface;
     }
-    defer Vk.DestroySurfaceKHR(context.vk.instance.handle, context.vk.surface.handle, null);
+    defer Vk.destroy_surface(context.vk.instance.handle, context.vk.surface.handle);
 
     // -------------------------------------------------------
     // @Note: Get the best physical device to create a logical device from
@@ -473,7 +473,7 @@ main :: () {
         context.vk.device.handle = device;
     }
 
-    defer Vk.DestroyDevice(context.vk.device.handle, null);
+    defer Vk.destroy_device(context.vk.device.handle);
 
     log_debug("Loading device proc addresses...");
     Vk.load_device_proc_addresses(context.vk.device.handle);
@@ -551,7 +551,7 @@ main :: () {
     };
     vert_shader_module, _ := Vk.create_shader_module(context.vk.device.handle, *vert_shader_module_ci);
     log_trace("Create shader module = %%");
-    defer Vk.DestroyShaderModule(context.vk.device.handle, vert_shader_module, null);
+    defer Vk.destroy_shader_module(context.vk.device.handle, vert_shader_module);
     log_unindent();
 
     log_debug("Loading fragment shader...");
@@ -575,7 +575,7 @@ main :: () {
     };
     frag_shader_module, _ := Vk.create_shader_module(context.vk.device.handle, *frag_shader_module_ci);
     log_trace("Create shader module = %%");
-    defer Vk.DestroyShaderModule(context.vk.device.handle, frag_shader_module, null);
+    defer Vk.destroy_shader_module(context.vk.device.handle, frag_shader_module);
     log_unindent();
 
 
@@ -619,7 +619,7 @@ main :: () {
 
     descriptor_set_layout, _ := Vk.create_descriptor_set_layout(context.vk.device.handle, *descriptor_set_layout_ci);
     log_trace("Create descriptor set layout = %%");
-    defer Vk.DestroyDescriptorSetLayout(context.vk.device.handle, descriptor_set_layout, null);
+    defer Vk.destroy_descriptor_set_layout(context.vk.device.handle, descriptor_set_layout);
 
     // -------------------------------------------------------
     // @Note: Setup descriptor pool and descriptor sets
@@ -641,7 +641,7 @@ main :: () {
 
     descriptor_pool, _ := Vk.create_descriptor_pool(context.vk.device.handle, *descriptor_pool_ci);
     log_trace("Create descriptor pool = %%");
-    defer Vk.DestroyDescriptorPool(context.vk.device.handle, descriptor_pool, null);
+    defer Vk.destroy_descriptor_pool(context.vk.device.handle, descriptor_pool);
 
     set_layouts : [MAX_FRAMES_IN_FLIGHT]Vk.DescriptorSetLayout = .[descriptor_set_layout, descriptor_set_layout];
 
@@ -665,7 +665,7 @@ main :: () {
     };
     pipeline_layout, _ := Vk.create_pipeline_layout(context.vk.device.handle, *pipeline_layout_ci);
     log_trace("Create pipeline layout = %%");
-    defer Vk.DestroyPipelineLayout(context.vk.device.handle, pipeline_layout, null);
+    defer Vk.destroy_pipeline_layout(context.vk.device.handle, pipeline_layout);
 
     // -------------------------------------------------------
     // @Note: Setup pipeline fixed function state
@@ -784,7 +784,7 @@ main :: () {
 
     gfx_pipeline, _ := Vk.create_one_graphics_pipeline(context.vk.device.handle, *gfx_pipeline_ci);
     log_trace("Create graphics pipeline = %%");
-    defer Vk.DestroyPipeline(context.vk.device.handle, gfx_pipeline, null);
+    defer Vk.destroy_pipeline(context.vk.device.handle, gfx_pipeline);
 
     // -------------------------------------------------------
     // @Note: Setup command pools
@@ -795,7 +795,7 @@ main :: () {
     };
     gfx_cmdpool, _ := Vk.create_command_pool(context.vk.device.handle, *gfx_cmdpool_ci);
     log_trace("Create graphics command pool = %%");
-    defer Vk.DestroyCommandPool(context.vk.device.handle, gfx_cmdpool, null);
+    defer Vk.destroy_command_pool(context.vk.device.handle, gfx_cmdpool);
 
     transfer_cmdpool_ci := Vk.CommandPoolCreateInfo.{
         flags            = .RESET_COMMAND_BUFFER,
@@ -803,7 +803,7 @@ main :: () {
     };
     transfer_cmdpool, _ := Vk.create_command_pool(context.vk.device.handle, *transfer_cmdpool_ci);
     log_trace("Create transfer command pool = %%");
-    defer Vk.DestroyCommandPool(context.vk.device.handle, transfer_cmdpool, null);
+    defer Vk.destroy_command_pool(context.vk.device.handle, transfer_cmdpool);
 
     // -------------------------------------------------------
     // @Note: Setup graphics and transfer command buffers
@@ -964,7 +964,7 @@ main :: () {
     };
     texture_sampler, _ := Vk.create_sampler(context.vk.device.handle, *texture_sampler_ci);
     log_trace("Create texture sampler = %%");
-    defer Vk.DestroySampler(context.vk.device.handle, texture_sampler, null);
+    defer Vk.destroy_sampler(context.vk.device.handle, texture_sampler);
     log_unindent();
 
     // -------------------------------------------------------
