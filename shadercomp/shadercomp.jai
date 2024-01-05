@@ -8,6 +8,7 @@ Shader_Output :: struct {
     path : string;
 }
 
+// -------------------------------------------------------
 
 advance_string :: (s : *string, count : s64) #expand {
     s.data  += count;
@@ -74,13 +75,14 @@ compile_shader :: (path : string, output_dir : string) -> outputs : []Shader_Out
             return .[], false;
         }
 
-        type_str := to_lower_copy(tprint("%", type));
+        type_str := tprint("%", type);
+        to_lower_in_place(type_str);
 
         print("Compiling % shader \"%\"...\n", type_str, shader_filename);
-        glslc_cmd := tprint("glslc \"%\" -o \"%\"", output_path, spv_path);
-        result, output, error := run_command(glslc_cmd, capture_and_return_output = true, arg_quoting = .NEVER_QUOTE);
+        glslc_args := string.[ "glslc", output_path, "-o", spv_path ];
+        result, output, error := run_command(..glslc_args, capture_and_return_output = true, arg_quoting = .NEVER_QUOTE);
         if result.type == .FAILED_TO_LAUNCH {
-            print("Failed to run command \"%\"!\n", glslc_cmd);
+            print("Failed to run command \"%\"!\n", join(..glslc_args, separator = " "));
             return .[], false;
         }
 
@@ -88,7 +90,7 @@ compile_shader :: (path : string, output_dir : string) -> outputs : []Shader_Out
         if error  then write_strings("\n", error, "\n");
 
         if result.type == .EXITED && result.exit_code != 0 {
-            print("'%' returned with exit code %.\n", glslc_cmd, result.exit_code);
+            print("'%' returned with exit code %.\n", join(..glslc_args, separator = " "), result.exit_code);
             return .[], false;
         }
 
@@ -97,7 +99,7 @@ compile_shader :: (path : string, output_dir : string) -> outputs : []Shader_Out
         #if DEBUG_SHADERCOMP_OUTPUT then print("Deleting % shader at \"%\"...\n", type_str, output_path);
         if !file_delete(output_path) {
             error, desc := get_error_value_and_string();
-            print("Could not delete file at \"%\": % (Error code %)\n", output_path, desc, error);
+            print("Could not delete file at \"%\": % (Error code: %)\n", output_path, desc, error);
         }
     }
 
@@ -143,7 +145,7 @@ get_shader_sources :: (file_data : string) -> Enum_Array(Shader_Type, string) {
 
             shader_ti := type_info(Shader_Type);
             for enum_name, index : shader_ti.names {
-                en := to_upper_copy(enum_name);
+                en := to_upper_copy_new(enum_name,, temp);
                 if type_token != en then continue;
 
                 shader_type = cast(Shader_Type) shader_ti.values[index];
