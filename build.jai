@@ -16,7 +16,7 @@ MAIN_EXE_NAME :: "primordial";
 BUILD_DIR     :: "build";
 ASSET_DIR     :: "assets";
 
-MODULE_IMPORT_PATHS :: string.["modules"];
+MODULE_IMPORT_PATHS :: string.["modules"];  // @Todo: Cleanup
 
 SHADER_CACHE_DIR :: #run tprint("%/%", ASSET_DIR, "_shader_cache");
 
@@ -26,6 +26,13 @@ DEBUG_SHADERCOMP_OUTPUT :: false;
 
 build :: () {
     set_build_options_dc(.{do_output=false});
+
+    jai_version : Version_Info;
+    print("Jai version: %\n", compiler_get_version_info(*jai_version));
+    if jai_version.major < 0 || jai_version.minor < 1 || jai_version.micro < 81 {
+        write_string("This program requires Jai version 0.1.81 or higher!\n");
+        return;
+    }
 
     error_checking  := false;
     release_build   := false;
@@ -56,9 +63,9 @@ build :: () {
     w_debug := compiler_create_workspace("Primordial debug");
     options := get_build_options(w_debug);
 
-    options.import_path                         = aggregate_import_paths(MODULE_IMPORT_PATHS, options.import_path);
+    options.import_path                         = aggregate_import_paths(MODULE_IMPORT_PATHS, options.import_path);  // @Todo: Cleanup
     options.output_path                         = exe_path;     // :InconsistentDirectoryMaking
-    options.intermediate_path                   = tprint("%/_int", BUILD_DIR);
+    options.intermediate_path                   = tprint("%/.int", BUILD_DIR);
     options.output_executable_name              = tprint("%_d", MAIN_EXE_NAME);
     options.backend                             = .LLVM;        // There's a bug with with isa types in the x64 backend, switch back when fixed
     options.use_natvis_compatible_types         = false;
@@ -133,11 +140,10 @@ build :: () {
                     add_build_string(asset_table_string, w_debug);
                     build_strings_inserted = true;
 
+                case .ERROR;
+                    return;
+
                 case .COMPLETE;
-                    m := cast(*Message_Complete) message;
-                    if m.error_code != .NONE {
-                        return;
-                    }
                     break message_loop;
             }
         }
@@ -283,13 +289,9 @@ aggregate_import_paths :: (paths : ..[]string) -> []string {
         total_size += it.count;
     }
 
-    aggregated := NewArray(total_size, string);
-    a_ptr := aggregated.data;
+    aggregated : [..] string;
     for p : paths {
-        for p {
-            a_ptr.* = it;
-            a_ptr += 1;
-        }
+        for p  array_add_if_unique(*aggregated, it);
     }
 
     print("Import paths: %\n", aggregated);
