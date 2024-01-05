@@ -1,3 +1,5 @@
+#module_parameters (WRAPPER := true);
+
 NULL_HANDLE :: null;
 
 Bool32 :: enum u32 {
@@ -68,4 +70,7 @@ VERSION_PATCH :: API_VERSION_PATCH;
 #if OS == .WINDOWS {
     wchar_t :: s16;
     #load "generated_windows.jai";
+
+#if WRAPPER {
+    #load "wrapper.jai";
 }

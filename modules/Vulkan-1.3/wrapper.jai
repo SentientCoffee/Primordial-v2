@@ -158,12 +158,6 @@ create_swapchain :: (device : Device, create_info : *SwapchainCreateInfoKHR, all
     return swapchain, result;
 }
 
-create_win32_surface :: (instance : Instance, create_info : *Win32SurfaceCreateInfoKHR, allocation_callbacks : *AllocationCallbacks = null) -> SurfaceKHR, Result {
-    surface : SurfaceKHR;
-    result := CreateWin32SurfaceKHR(instance, create_info, allocation_callbacks, *surface);
-    return surface, result;
-}
-
 // -------------------------------------------------------
 
 get_buffer_memory_requirements :: (device : Device, buffer : Buffer) -> MemoryRequirements {
@@ -420,9 +414,26 @@ update_descriptor_sets :: inline (device : Device, writes : []WriteDescriptorSet
 
 // -------------------------------------------------------
 
-using #import "Vulkan-1.3";
+#if OS == .WINDOWS {
+    create_win32_surface :: (instance : Instance, create_info : *Win32SurfaceCreateInfoKHR, allocation_callbacks : *AllocationCallbacks = null) -> SurfaceKHR, Result {
+        surface : SurfaceKHR;
+        result := CreateWin32SurfaceKHR(instance, create_info, allocation_callbacks, *surface);
+        return surface, result;
+    }
+}
+
+// -------------------------------------------------------
+
+#if OS == .LINUX {
+    create_xlib_surface :: (instance : Instance, create_info : *XlibSurfaceCreateInfoKHR, allocation_callbacks : *AllocationCallbacks = null) -> SurfaceKHR, Result {
+        surface : SurfaceKHR;
+        result := CreateXlibSurfaceKHR(instance, create_info, allocation_callbacks, *surface);
+        return surface, result;
+    }
+}
 
 #scope_file
 
-#import "Basic";
-#import "Math";
+U64_MAX : u64 : 0xffff_ffff_ffff_ffff;
+
+#import "Basic"; // For NewArray

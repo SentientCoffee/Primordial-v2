@@ -1379,7 +1379,7 @@ main :: () {
 
 // -------------------------------------------------------
 
-Vk :: #import,file "vk_wrapper.jai";
+Vk :: #import "Vulkan-1.3" (WRAPPER = true);
 
 #import "Enum_Array";
 
