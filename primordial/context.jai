@@ -272,7 +272,7 @@ console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
 
 // -------------------------------------------------------
 
-assert_proc :: (loc : Source_Code_Location, message : string) {
+assert_proc :: (loc : Source_Code_Location, message : string) -> bool {
     sb := string_builder_make();
     string_builder_print(*sb, "%\n", message);
 
@@ -342,10 +342,17 @@ assert_proc :: (loc : Source_Code_Location, message : string) {
                 abort();
             }
     };
+
+    return false;  // We're handling the program debug_break ourselves.
 }
 
 abort :: () {
-    Win32.TerminateProcess(Win32.GetCurrentProcess(), xx Debug.Exit_Code.Assert);
+    #if OS == .WINDOWS {
+        Win32.TerminateProcess(Win32.GetCurrentProcess(), xx Debug.Exit_Code.Assert);
+    }
+    else #if OS == .LINUX {
+        exit(2);
+    }
 }
 
 attach_to_debugger :: () -> bool {

@@ -136,7 +136,7 @@ MAX_FRAMES_IN_FLIGHT :: 2;
 // -------------------------------------------------------
 
 main :: () {
-    setup_context(highest_logger_level = .Debug);
+    setup_context(highest_logger_level = .Debug, logger_flags = .Level);
 
     // -------------------------------------------------------
     // @Note: Create window
@@ -1164,7 +1164,7 @@ main :: () {
     // @Note: Main loop
 
     current_frame_idx := 0;
-    start_time        := get_time();
+    start_time        := seconds_since_init();
     current_time      : float64;
 
     camera := camera_make(.{0, 4, 4}, .{0, 0, 0});
@@ -1173,7 +1173,7 @@ main :: () {
         swapchain := *context.vk.swapchain;
         device    := context.vk.device.handle;
 
-        current_time = get_time();
+        current_time = seconds_since_init();
         dt := current_time - start_time;
 
         // -------------------------------------------------------
