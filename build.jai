@@ -144,16 +144,21 @@ build :: () {
     }
     compiler_end_intercept(w_debug);
 
-    write_strings("----------\n", "DLLs copied:\n");
+    write_strings("----------\n", "Shared libraries copied:\n");
     for MODULE_IMPORT_PATHS {
-        dlls : [..]File_Visit_Info;
-        dlls.allocator = temp;
+        dylibs : [..]File_Visit_Info;
+        dylibs.allocator = temp;
 
-        visit_files(dir_name = it, recursive = true, user_data = *dlls, proc = find_dlls);
+        #if OS == .WINDOWS {
+            visit_files(dir_name = it, recursive = true, user_data = *dylibs, proc = find_dlls);
+        }
+        else {
+            visit_files(dir_name = it, recursive = true, user_data = *dylibs, proc = find_shared_objects);
+        }
 
-        for dll : dlls {
-            print("  %\n", dll.full_name);
-            copy_file(dll.full_name, tprint("%/%", exe_path, dll.short_name));
+        for dylib : dylibs {
+            print("  %\n", dylib.full_name);
+            copy_file(dylib.full_name, tprint("%/%", exe_path, dylib.short_name));
         }
     }
     write_string("\n");
@@ -175,7 +180,7 @@ build :: () {
 
 generate_asset_table :: (compile_shaders : bool) -> string, bool {
     find_images :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
-        if !ends_with(info.short_name, ".png") return;
+        if !ends_with(info.short_name, ".png") then return;
 
         new_info := info;
         basename := get_basename_and_path(info.short_name);
@@ -186,7 +191,7 @@ generate_asset_table :: (compile_shaders : bool) -> string, bool {
     }
 
     find_shader_binaries :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
-        if !ends_with(info.short_name, ".spv") return;
+        if !ends_with(info.short_name, ".spv") then return;
 
         new_info := info;
         basename := get_basename_and_path(info.short_name);
@@ -197,7 +202,7 @@ generate_asset_table :: (compile_shaders : bool) -> string, bool {
     }
 
     find_shader_sources :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
-        if !ends_with(info.short_name, ".glsl") return;
+        if !ends_with(info.short_name, ".glsl") then return;
 
         new_info := info;
         new_info.full_name  = copy_string(info.full_name);
@@ -292,7 +297,16 @@ aggregate_import_paths :: (paths : ..[]string) -> []string {
 }
 
 find_dlls :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
-    if !ends_with(info.short_name, ".dll") return;
+    if !ends_with(info.short_name, ".dll") then return;
+
+    new_info := info;
+    new_info.full_name  = copy_string(info.full_name);
+    new_info.short_name = copy_string(info.short_name);
+    array_add(user_data, new_info);
+}
+
+find_shared_objects :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
+    if !ends_with(info.short_name, ".so") then return;
 
     new_info := info;
     new_info.full_name  = copy_string(info.full_name);

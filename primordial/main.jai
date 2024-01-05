@@ -1,6 +1,6 @@
 // TODO:
 // - [ ] Test on Linux?
-//   - [ ] Generate linux vk bindings
+//   - [x] Generate linux vk bindings
 //   - [ ] Platform layer code
 // - [ ] Check result values of Vk calls
 // - [ ] Better physical device selection
@@ -146,14 +146,11 @@ main :: () {
     // -------------------------------------------------------
     // @Note: Load vulkan dll and load global commands
 
-    context.vk.module = Win32.LoadLibraryExW(utf8_to_wide("vulkan-1.dll"), null, flags = 0);
-    defer Win32.FreeLibrary(context.vk.module);
+    context.vk.module = load_vulkan_lib();
+    defer unload_vulkan_lib();
 
     log_debug("Loading global proc addresses...");
-    Vk.load_global_proc_addresses((proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction {
-        assert(context.vk.module != null, "Must load the vk_module before loading global proc addresses!");
-        return xx Win32.GetProcAddress(context.vk.module, proc_name);
-    });
+    Vk.load_global_proc_addresses(vulkan_proc_loader);
 
     // -------------------------------------------------------
     // @Note: Check that we have all required extensions
@@ -292,7 +289,8 @@ main :: () {
     // -------------------------------------------------------
     // @Note: Create vulkan surface
 
-    {
+    #if OS == .WINDOWS {
+        Win32 :: #import "Windows";
         hinstance  := Win32.GetModuleHandleW(null);  // @Todo: Add GetModuleHandleExW to Windows module
         surface_ci := Vk.Win32SurfaceCreateInfoKHR.{
             hinstance = hinstance,
@@ -301,6 +299,17 @@ main :: () {
 
         surface, _ := Vk.create_win32_surface(context.vk.instance.handle, *surface_ci);
         log_trace("Create Win32 surface = %%");
+        context.vk.surface.handle = surface;
+    }
+    else #if OS == .LINUX {
+        X11 :: #import "X11";
+        surface_ci := Vk.XlibSurfaceCreateInfoKHR.{
+            dpy    = X11.x_global_display,
+            window = app_window,
+        };
+
+        surface, _ := Vk.create_xlib_surface(context.vk.instance.handle, *surface_ci);
+        log_trace("Create Xlib surface = %%");
         context.vk.surface.handle = surface;
     }
     defer Vk.DestroySurfaceKHR(context.vk.instance.handle, context.vk.surface.handle, null);
@@ -1385,7 +1394,6 @@ Vk :: #import "Vulkan-1.3" (WRAPPER = true);
 
 Input  :: #import "Input";
 Window :: #import "Window_Creation";
-Win32  :: #import "Windows";
 
 #import "Basic";
 #import "File";
@@ -1393,7 +1401,6 @@ Win32  :: #import "Windows";
 #import "Print_Color";
 #import "Sloppy_Math";
 #import "stb_image";
-#import "Windows_Utf8";
 
 using,except(Table) HT :: #import "Hash_Table";
 Hash_Table :: HT.Table;

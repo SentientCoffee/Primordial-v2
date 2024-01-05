@@ -1,5 +1,5 @@
 #add_context vk : struct {
-    module      : Win32.HMODULE;
+    module      : *void;
     instance    : Instance;
     surface     : Surface;
     device      : Device;
@@ -12,11 +12,21 @@
 Instance :: struct {
     handle : Vk.Instance;
 
-    extensions :: *u8.[
-        Vk.KHR_SURFACE_\     EXTENSION_NAME,
-        Vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
-        Vk.EXT_DEBUG_UTILS_\ EXTENSION_NAME,
-    ];
+    #if OS == .WINDOWS {
+        extensions :: *u8.[
+            Vk.KHR_SURFACE_\     EXTENSION_NAME,
+            Vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
+            Vk.EXT_DEBUG_UTILS_\ EXTENSION_NAME,
+        ];
+    }
+    else #if OS == .LINUX {
+        extensions :: *u8.[
+            Vk.KHR_SURFACE_\    EXTENSION_NAME,
+            Vk.KHR_XLIB_SURFACE_EXTENSION_NAME,
+            Vk.EXT_DEBUG_UTILS_\EXTENSION_NAME,
+        ];
+    }
+
     layers :: *u8.[
         Vk.KHR_VALIDATION_LAYER_NAME,
     ];
@@ -485,3 +495,45 @@ frame_sync_destroy :: (using frame_sync : Frame_Sync) {
     Vk.DestroySemaphore(context.vk.device.handle, render_finished_sem, null);
     Vk.DestroyFence(context.vk.device.handle, in_flight_fence, null);
 }
+
+// -------------------------------------------------------
+
+#if OS == .WINDOWS {
+    #import "Windows";
+    #import "Windows_Utf8";
+
+    load_vulkan_lib :: () -> *void {
+        return LoadLibraryExW(utf8_to_wide("vulkan-1.dll",, temp), null, flags = 0);
+    }
+
+    unload_vulkan_lib :: () {
+        FreeLibrary(utf8_to_wide("vulkan-1.dll",, temp), null, flags = 0);
+    }
+
+    vulkan_proc_loader :: (proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction {
+        assert(context.vk.module != null, "Must load the vk_module before loading global proc addresses!");
+        return xx GetProcAddress(xx context.vk.module, proc_name);
+    }
+}
+else #if OS == .LINUX {
+    #import "POSIX";
+
+    load_vulkan_lib :: () -> *void {
+        handle := dlopen("libvulkan.so", RTLD_LAZY);
+        if !handle {
+            assert(false, to_string(dlerror()));
+        }
+        return handle;
+    }
+
+    unload_vulkan_lib :: () {
+        dlclose(context.vk.module);
+    }
+
+    vulkan_proc_loader :: (proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction {
+        assert(context.vk.module != null, "Must load the vk_module before loading global proc addresses!");
+        return dlsym(context.vk.module, proc_name);
+    }
+}
+
+

@@ -65,11 +65,15 @@ VERSION_PATCH :: API_VERSION_PATCH;
 
 // -------------------------------------------
 
-#load "loader.jai";
-
 #if OS == .WINDOWS {
     wchar_t :: s16;
     #load "generated_windows.jai";
+    #load "loader_windows.jai";
+}
+else #if OS == .LINUX {
+    #load "generated_linux.jai";
+    #load "loader_linux.jai";
+}
 
 #if WRAPPER {
     #load "wrapper.jai";

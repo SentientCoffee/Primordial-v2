@@ -1,7 +1,7 @@
 // MIT License - Copyright (c) 2022-2023 Hamad Almamari
 // You can use this file to generate any version of vulkan bindings.
 // You only need to set the vulkan.h and vulkan lib paths.
-// Modified by Ryan Capote and Daniel Presas for Vulkan 1.3.250
+// Modified by Ryan Capote and Daniel Presas for Vulkan 1.3.274
 
 // config
 AT_COMPILE_TIME   :: true;
@@ -10,7 +10,10 @@ vulkan_h_location :: "src/vulkan.h";
 #if OS == .WINDOWS {
     extra_source_files :: string.["src/vulkan_win32.h"];
 } else #if OS == .LINUX {
-    extra_source_files :: string.[];
+    extra_source_files :: string.[
+        "src/vulkan_xlib.h",
+        // "src/vulkan_xlib_xrandr.h",
+    ];
 }
 
 #if AT_COMPILE_TIME then #run {
@@ -44,7 +47,6 @@ else {
             exit(1);
         }
     }
-
 }
 
 //--------------------
@@ -117,6 +119,9 @@ generate_bindings :: () -> bool {
         #if OS == .WINDOWS {
             array_add(*extra_clang_arguments, "-x", "c", "-DWIN32_LEAN_AND_MEAN", "-DVK_USE_PLATFORM_WIN32_KHR");
         }
+        else #if OS == .LINUX {
+            array_add(*extra_clang_arguments, "-x", "c", "-DVK_USE_PLATFORM_XLIB_KHR"/*, "-DVK_USE_PLATFORM_XLIB_XRANDR_EXT"*/);
+        }
 
         array_add(*source_files, vulkan_h_location);
         array_add(*system_include_paths, GENERATOR_DEFAULT_SYSTEM_INCLUDE_PATH);
@@ -142,7 +147,12 @@ generate_bindings :: () -> bool {
 }
 
 generate_loader :: () -> bool {
-    loader_filename := "loader.jai";
+    #if OS == .WINDOWS {
+        loader_filename :: "loader_windows.jai";
+    }
+    else #if OS == .LINUX {
+        loader_filename :: "loader_linux.jai";
+    }
     log("Generating \"%\"...\n", loader_filename);
 
     loader_builder : String_Builder;
@@ -421,13 +431,13 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
             case "vkEnumerateInstanceVersion";             #through;
             case "vkGetInstanceProcAddr";
                 array_add(*global_procs, .{
-                    name        = copy_string(decl.name, allocator = global_procs.allocator),
-                    output_name = copy_string(decl.output_name, allocator = global_procs.allocator),
+                    name        = copy_string(decl.name,, global_procs.allocator),
+                    output_name = copy_string(decl.output_name,, global_procs.allocator),
                 });
             case "vkGetDeviceProcAddr";
                 array_add(*instance_procs, .{
-                    name        = copy_string(decl.name, allocator = instance_procs.allocator),
-                    output_name = copy_string(decl.output_name, allocator = instance_procs.allocator),
+                    name        = copy_string(decl.name,, instance_procs.allocator),
+                    output_name = copy_string(decl.output_name,, instance_procs.allocator),
                 });
             case;
                 if fn_type.arguments[0].type.type_of_typedef {
@@ -436,15 +446,15 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
                         case "VkInstance";       #through;
                         case "VkPhysicalDevice";
                             array_add(*instance_procs, .{
-                                name        = copy_string(decl.name, allocator = instance_procs.allocator),
-                                output_name = copy_string(decl.output_name, allocator = instance_procs.allocator),
+                                name        = copy_string(decl.name,, instance_procs.allocator),
+                                output_name = copy_string(decl.output_name,, instance_procs.allocator),
                             });
                         case "VkDevice";         #through;
                         case "VkQueue";          #through;
                         case "VkCommandBuffer";
                             array_add(*device_procs, .{
-                                name        = copy_string(decl.name, allocator = device_procs.allocator),
-                                output_name = copy_string(decl.output_name, allocator = device_procs.allocator),
+                                name        = copy_string(decl.name,, device_procs.allocator),
+                                output_name = copy_string(decl.output_name,, device_procs.allocator),
                             });
                     }
                 }
@@ -498,20 +508,9 @@ get_sType_default_value_from_struct_name :: (name: string) -> string {
 
 #scope_file
 
-#if OS == .WINDOWS {
-
-VULKAN_FOOTER :: #string __JAI
-#scope_file
-
-#import "Windows";
-__JAI
-
-}
-else {
-
-VULKAN_FOOTER :: "";
-
-}
+#if      OS == .WINDOWS { VULKAN_FOOTER :: "#import \"Windows\";\n"; }
+else #if OS == .LINUX   { VULKAN_FOOTER :: "#import \"X11\";\n";     }
+else                    { VULKAN_FOOTER :: "";                      }
 
 //--------------------
 
