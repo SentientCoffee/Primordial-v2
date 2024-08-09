@@ -1,3 +1,5 @@
+// The Vertex struct (in main.jai) defines the `in` attributes (prefixed with `i_`)
+
 #type VERTEX
 
 layout(binding = 0) uniform Matrices {
@@ -5,10 +7,6 @@ layout(binding = 0) uniform Matrices {
     mat4 view;
     mat4 proj;
 } u_mtx;
-
-layout(location = 0) in vec3 i_position;
-layout(location = 1) in vec3 i_color;
-layout(location = 2) in vec2 i_uv;
 
 layout(location = 0) out vec3 o_color;
 layout(location = 1) out vec2 o_uv;

@@ -137,7 +137,7 @@ buffer_with_memory_make :: (size : Vk.DeviceSize, usage : Vk.BufferUsageFlags, m
     buffer_mem_reqs   := Vk.get_buffer_memory_requirements(device, buffer.buffer);
     memory_type_index := get_memory_type_index(memory_property_flags, buffer_mem_reqs.memoryTypeBits);
 
-    buffer.memory, result = Vk.allocate_memory(device, *Vk.MemoryAllocateInfo.{ allocationSize = buffer_mem_reqs.size, memoryTypeIndex = memory_type_index });
+    buffer.memory, result = Vk.allocate_memory(device, *(Vk.MemoryAllocateInfo.{ allocationSize = buffer_mem_reqs.size, memoryTypeIndex = memory_type_index }));
     log_trace("Allocate memory = %", result);
     if result != .SUCCESS then return .{}, result;
 
@@ -191,7 +191,7 @@ image_make :: (width : u32, height : u32, format : Vk.Format, tiling : Vk.ImageT
     image_mem_reqs    := Vk.get_image_memory_requirements(device, image.image);
     memory_type_index := get_memory_type_index(memory_property_flags, image_mem_reqs.memoryTypeBits);
 
-    image.memory, result = Vk.allocate_memory(device, *Vk.MemoryAllocateInfo.{ allocationSize = image_mem_reqs.size, memoryTypeIndex = memory_type_index });
+    image.memory, result = Vk.allocate_memory(device, *(Vk.MemoryAllocateInfo.{ allocationSize = image_mem_reqs.size, memoryTypeIndex = memory_type_index }));
     log_trace("Allocate memory = %", result);
     if result != .SUCCESS then return .{}, result;
 
@@ -231,11 +231,41 @@ image_destroy :: (image : Image) {
     Vk.destroy_image_view(context.vk.device.handle, image.view);
 }
 
+cmd_image_transition :: (cmdbuf : Vk.CommandBuffer, image : Image, old_layout : Vk.ImageLayout, new_layout : Vk.ImageLayout) {
+    aspect_mask : Vk.ImageAspectFlags = ifx new_layout == .DEPTH_ATTACHMENT_OPTIMAL then .DEPTH else .COLOR;
+
+    image_barrier := Vk.ImageMemoryBarrier2.{
+        image           = image.image,
+        srcStageMask    = .ALL_COMMANDS,
+        srcAccessMask   = .MEMORY_WRITE,
+        dstStageMask    = .ALL_COMMANDS,
+        dstAccessMask   = .MEMORY_WRITE | .MEMORY_READ,
+
+        oldLayout       = old_layout,
+        newLayout       = new_layout,
+
+        subresourceRange = .{
+            aspectMask     = aspect_mask,
+            baseMipLevel   = 0,
+            levelCount     = Vk.REMAINING_MIP_LEVELS,
+            baseArrayLayer = 0,
+            layerCount     = Vk.REMAINING_ARRAY_LAYERS,
+        },
+    };
+
+    dependency_info := Vk.DependencyInfo.{
+        imageMemoryBarrierCount = 1,
+        pImageMemoryBarriers    = *image_barrier,
+    };
+
+    Vk.CmdPipelineBarrier2(cmdbuf, *dependency_info);
+}
+
 // -------------------------------------------------------
 
 Render_Pass :: struct {
     handle      : Vk.RenderPass;
-    attachments : []Vk.AttachmentDescription;
+    attachments : []Vk.AttachmentDescription; @Color @Depth
 }
 
 render_pass_make :: (device : Device, surface : Surface) -> Render_Pass {
@@ -270,7 +300,9 @@ render_pass_make :: (device : Device, surface : Surface) -> Render_Pass {
     rp_color_attachment_refs := Vk.AttachmentReference.[
         .{ attachment = 0, layout = .COLOR_ATTACHMENT_OPTIMAL },
     ];
-    rp_depth_attachment_ref := Vk.AttachmentReference.{ attachment = 1, layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+    rp_depth_attachment_ref := Vk.AttachmentReference.{
+        attachment = 1, layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
 
     rp_subpasses := Vk.SubpassDescription.[
         .{
@@ -469,19 +501,19 @@ frame_sync_make :: () -> Frame_Sync, Vk.Result {
     frame_sync : Frame_Sync;
 
     {
-        sem, result := Vk.create_semaphore(context.vk.device.handle, *Vk.SemaphoreCreateInfo.{});
+        sem, result := Vk.create_semaphore(context.vk.device.handle, *(Vk.SemaphoreCreateInfo.{}));
         log_trace("Create swapchain image semaphore = %", result);
         if result != .SUCCESS then return .{}, result;
         frame_sync.swapchain_image_sem = sem;
     }
     {
-        sem, result := Vk.create_semaphore(context.vk.device.handle, *Vk.SemaphoreCreateInfo.{});
+        sem, result := Vk.create_semaphore(context.vk.device.handle, *(Vk.SemaphoreCreateInfo.{}));
         log_trace("Create render finished semaphore = %", result);
         if result != .SUCCESS then return .{}, result;
         frame_sync.render_finished_sem = sem;
     }
     {
-        fence, result := Vk.create_fence(context.vk.device.handle, *Vk.FenceCreateInfo.{ flags = .SIGNALED });
+        fence, result := Vk.create_fence(context.vk.device.handle, *(Vk.FenceCreateInfo.{ flags = .SIGNALED }));
         log_trace("Create in flight fence = %", result);
         if result != .SUCCESS then return .{}, result;
         frame_sync.in_flight_fence = fence;
@@ -507,7 +539,7 @@ frame_sync_destroy :: (using frame_sync : Frame_Sync) {
     }
 
     unload_vulkan_lib :: () {
-        FreeLibrary(utf8_to_wide("vulkan-1.dll",, temp), null, flags = 0);
+        FreeLibrary(xx context.vk.module, null, flags = 0);
     }
 
     vulkan_proc_loader :: (proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction {

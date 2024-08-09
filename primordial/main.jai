@@ -1,7 +1,7 @@
 // TODO:
-// - [ ] Test on Linux?
+// - [x] Test on Linux?
 //   - [x] Generate linux vk bindings
-//   - [ ] Platform layer code
+//   - [x] Platform layer code
 // - [ ] Check result values of Vk calls
 // - [ ] Better physical device selection
 // - [ ] Better assert proc (Stop relying on Debug module)
@@ -16,12 +16,12 @@ window_title  := #run tprint("Vulkan (%)", DRAW_CMD);
 // -------------------------------------------------------
 
 Vertex :: struct {
-    position : Vector3;
-    color    : Vector3;
-    uv       : Vector2;
+    position : Vector3;  @Binding=0 @Location=1
+    color    : Vector3;  @Binding=0 @Location=2
+    uv       : Vector2;  @Binding=0 @Location=3
 }
 
-Matrix_Uniforms :: struct {
+Uniform_Matrices :: struct {
     model := Matrix4_Identity #align 16;
     view  := Matrix4_Identity #align 16;
     proj  := Matrix4_Identity #align 16;
@@ -34,7 +34,7 @@ DRAW_CMD : enum {
     CmdDrawInstanced;
     CmdDrawIndexed;
     CmdDrawIndexedInstanced;
-} : .CmdDrawInstanced;
+} : .CmdDrawIndexedInstanced;
 
 #if DRAW_CMD == .CmdDraw || DRAW_CMD == .CmdDrawInstanced {
     VERTICES :: Vertex.[
@@ -682,22 +682,51 @@ main :: () {
         pScissors     = null,
     };
 
-    // #if DRAW_CMD == .CmdDrawInstanced || DRAW_CMD == .CmdDrawIndexedInstanced {
-    //     vertex_input_binding_descs := Vk.VertexInputBindingDescription.[
-    //         .{ binding = 0, stride = size_of(Vertex), inputRate = .VERTEX },
-    //         .{ binding = 0, stride = size_of(Vertex), inputRate = .INSTANCE },
-    //     ];
-    // }
-    // else {
-        vertex_input_binding_descs := Vk.VertexInputBindingDescription.[
-            .{ binding = 0, stride = size_of(Vertex), inputRate = .VERTEX },
-        ];
-    // }
-    vertex_input_attribute_descs := Vk.VertexInputAttributeDescription.[
-        .{ binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "position") },
-        .{ binding = 0, location = 1, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "color"   ) },
-        .{ binding = 0, location = 2, format = .R32G32\  _SFLOAT, offset = cast(u32) offset_of(Vertex, "uv"      ) },
+    vertex_input_binding_descs := Vk.VertexInputBindingDescription.[
+        .{ binding = 0, stride = size_of(Vertex), inputRate = .VERTEX },
     ];
+
+    #insert -> string {
+        builder : String_Builder;
+        append(*builder, "vertex_input_attribute_descs := Vk.VertexInputAttributeDescription.[\n");
+
+        members := (cast(*Type_Info_Struct) Vertex).members;
+        for member : members {
+            binding, location, format : string;
+            for note : member.notes {
+                BINDING  :: "Binding=";
+                LOCATION :: "Location=";
+
+                if starts_with(note, BINDING) {
+                    binding = string.{note.count - BINDING.count, note.data + BINDING.count};
+                }
+                if starts_with(note, LOCATION) {
+                    location = string.{note.count - LOCATION.count, note.data + LOCATION.count};
+                }
+            }
+
+            if member.type == cast(*Type_Info) Vector2 {
+                format = "R32G32_SFLOAT";
+            }
+            else if member.type == cast(*Type_Info) Vector3 {
+                format = "R32G32B32_SFLOAT";
+            }
+            else {
+                assert(false, "Unhandled type \"%\"!", member.type);
+            }
+
+            print_to_builder(*builder, ".{ binding = %, location = %, format = .%, offset = % },\n", binding, location, format, member.offset_in_bytes);
+        }
+
+        append(*builder, "];\n");
+        return builder_to_string(*builder);
+    }
+
+    // vertex_input_attribute_descs := Vk.VertexInputAttributeDescription.[
+    //     .{ binding = 0, location = 0, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "position") },
+    //     .{ binding = 0, location = 1, format = .R32G32B32_SFLOAT, offset = cast(u32) offset_of(Vertex, "color"   ) },
+    //     .{ binding = 0, location = 2, format = .R32G32\  _SFLOAT, offset = cast(u32) offset_of(Vertex, "uv"      ) },
+    // ];
     vertex_input_state_ci := Vk.PipelineVertexInputStateCreateInfo.{
         vertexBindingDescriptionCount   = vertex_input_binding_descs.count,
         pVertexBindingDescriptions      = vertex_input_binding_descs.data,
@@ -867,7 +896,7 @@ main :: () {
         // @Note: Using graphics queue because you can't transition to shader read in transfer queue
         _ := Vk.ResetCommandBuffer(gfx_cmdbufs[0], 0);
         log_trace("Reset graphics command buffer = %%");
-        _ := Vk.BeginCommandBuffer(gfx_cmdbufs[0], *Vk.CommandBufferBeginInfo.{});
+        _ := Vk.BeginCommandBuffer(gfx_cmdbufs[0], *(Vk.CommandBufferBeginInfo.{}));
         log_trace("Begin graphics command buffer = %%");
         {
             // @Note: Transition image layout to transfer dst
@@ -992,7 +1021,7 @@ main :: () {
         // @Note: Perform BufferCopy from staging buffer to device buffer
         _ := Vk.ResetCommandBuffer(transfer_cmdbuf, 0);
         log_trace("Reset transfer command buffer = %%");
-        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *Vk.CommandBufferBeginInfo.{});
+        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *(Vk.CommandBufferBeginInfo.{}));
         log_trace("Begin transfer command buffer = %%");
         {
             buffer_copy := Vk.BufferCopy.{ size = VERTICES_SIZE_BYTES };
@@ -1037,7 +1066,7 @@ main :: () {
         // @Note: Perform BufferCopy from staging buffer to device buffer
         _ := Vk.ResetCommandBuffer(transfer_cmdbuf, 0);
         log_trace("Reset transfer command buffer = %%");
-        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *Vk.CommandBufferBeginInfo.{});
+        _ := Vk.BeginCommandBuffer(transfer_cmdbuf, *(Vk.CommandBufferBeginInfo.{}));
         log_trace("Begin transfer command buffer = %%");
         {
             buffer_copy := Vk.BufferCopy.{ size = INDICES_SIZE_BYTES };
@@ -1083,14 +1112,14 @@ main :: () {
 
                     // @Note: Since these are going to change every frame, no point in making staging buffers for them.
                     //        Therefore, no need to make them be .TRANSFER_DST or .DEVICE_LOCAL
-                    matrix_uniform_buffers[it].buf_mem, _ = buffer_with_memory_make(size_of(Matrix_Uniforms), .UNIFORM_BUFFER, .HOST_VISIBLE | .HOST_COHERENT);
-                    matrix_uniform_buffers[it].mapped,  _ = Vk.map_memory(context.vk.device.handle, matrix_uniform_buffers[it].memory, offset = 0, size = size_of(Matrix_Uniforms));
+                    matrix_uniform_buffers[it].buf_mem, _ = buffer_with_memory_make(size_of(Uniform_Matrices), .UNIFORM_BUFFER, .HOST_VISIBLE | .HOST_COHERENT);
+                    matrix_uniform_buffers[it].mapped,  _ = Vk.map_memory(context.vk.device.handle, matrix_uniform_buffers[it].memory, offset = 0, size = size_of(Uniform_Matrices));
                     log_trace("Map matrix uniform memory = %%");
 
                     buffer_info := Vk.DescriptorBufferInfo.{
                         buffer = matrix_uniform_buffers[it].buffer,
                         offset = 0,
-                        range  = size_of(Matrix_Uniforms),
+                        range  = size_of(Uniform_Matrices),
                     };
 
                     descriptor_writes[bi] = .{
@@ -1258,7 +1287,7 @@ main :: () {
         // @Note: Reset and begin command buffer
 
         _ := Vk.ResetCommandBuffer(cmdbuf, 0);
-        _ := Vk.BeginCommandBuffer(cmdbuf, *Vk.CommandBufferBeginInfo.{});
+        _ := Vk.BeginCommandBuffer(cmdbuf, *(Vk.CommandBufferBeginInfo.{}));
         {
             CLEAR_VALUES :: Vk.ClearValue.[
                 .{ color        = .{ _float32 = .[0.2, 0.3, 0.3, 1.0] } },
@@ -1327,12 +1356,12 @@ main :: () {
         q : Quaternion;
         set_from_axis_and_angle(*q, .{0.5, 1.0, 0.5}, cast(float) (current_time * radians(90))); // @Note: Radians
 
-        matrix_uniforms := Matrix_Uniforms.{
+        matrix_uniforms := Uniform_Matrices.{
             model = rotate(Matrix4_Identity, q) * translate(Matrix4_Identity, .{0, 0, 0}),
             view  = look_at(camera),
             proj  = perspective(radians(camera.fov), aspect, 0.1, 100.0),
         };
-        mem_copy(matrix_uniform_buffers[current_frame_idx].mapped, *matrix_uniforms, size_of(Matrix_Uniforms));
+        mem_copy(matrix_uniform_buffers[current_frame_idx].mapped, *matrix_uniforms, size_of(Uniform_Matrices));
 
         // -------------------------------------------------------
         // @Note: Submit to graphics queue
@@ -1400,6 +1429,7 @@ Window :: #import "Window_Creation";
 #import "Math";
 #import "Print_Color";
 #import "Sloppy_Math";
+#import "String";
 #import "stb_image";
 
 using,except(Table) HT :: #import "Hash_Table";
