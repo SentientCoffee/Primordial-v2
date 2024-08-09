@@ -84,6 +84,13 @@ OMIT_LIST :: string.[
     "VkBool32",
 ];
 
+STATIC_CONST_ENUMS :: ([2]string).[
+    .[ "VkPipelineStageFlagBits2",              "VK_PIPELINE_STAGE_2" ],
+    .[ "VkAccessFlagBits2",                     "VK_ACCESS_2" ],
+    .[ "VkFormatFeatureFlagBits2",              "VK_FORMAT_FEATURE_2" ],
+    .[ "VkMemoryDecompressionMethodFlagBitsNV", "VK_MEMORY_DECOMPRESSION_METHOD" ],
+];
+
 ProcName :: struct {
     name        : string;
     output_name : string;
@@ -142,8 +149,19 @@ generate_bindings :: () -> bool {
     array_reserve(*instance_procs, 128);  // @Todo: Should we do this at all? Or is remember_allocators enough?
     array_reserve(*device_procs,   128);  // @Todo: Should we do this at all? Or is remember_allocators enough?
 
-    success := generate_bindings(opts, output_filename);
-    return success;
+    builder, success := generate_bindings(opts, log_results = true);
+    if !success {
+        log_error("Could not generate output for \"%\"\n", output_filename);
+        return false;
+    }
+
+    print("Generating \"%\"... ", output_filename);
+    if !write_entire_file(output_filename, *builder) {
+        log_error("Could not write generated output to \"%\"\n", output_filename);
+        return false;
+    }
+    log("OK!\n");
+    return true;
 }
 
 generate_loader :: () -> bool {
@@ -153,7 +171,7 @@ generate_loader :: () -> bool {
     else #if OS == .LINUX {
         loader_filename :: "loader_linux.jai";
     }
-    log("Generating \"%\"...\n", loader_filename);
+    print("Generating \"%\"... ", loader_filename);
 
     loader_builder : String_Builder;
     init_string_builder(*loader_builder);
@@ -222,11 +240,13 @@ generate_loader :: () -> bool {
         return false;
     }
 
-    log("OK! generated \"%\"\n", loader_filename);
+    log("OK!\n");
     return true;
 }
 
+missing_flag_bits   : Hash_Table(string, *Typedef);
 available_flag_bits : Hash_Table(string, *Enum);
+static_const_enums  : Hash_Table(string, *Enum);
 struct_type_decl    : *Enum;
 
 vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_Visit_Result {
@@ -244,6 +264,77 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
         //print("OMIT_LIST: %\n", decl.name);
         decl.decl_flags |= .OMIT_FROM_OUTPUT;
         return .STOP;
+    }
+
+    // Generate 64-bit enums from static const VkFlags64
+    if decl.kind == .TYPEDEF {
+        found, idx := array_find(context.generator.global_scope.members, decl);
+        assert(found, "Cannot find decl????");
+
+        sc_enum := false;
+        for en : STATIC_CONST_ENUMS {
+            if decl.name != en[0] then continue;
+            sc_enum = true;
+
+            _enum := New(Enum);
+            _enum.name        = decl.name;
+            _enum.output_name = decl.output_name;
+            _enum.type        = decl.type.type_of_typedef.type;
+            _enum.location    = decl.location;
+
+            if contains(decl.name, "FlagBits") {
+                _enum.flags   = .IS_ENUM_FLAGS | .VALUES_IN_HEX;
+                table_add(*available_flag_bits, decl.name, _enum);
+            }
+
+            table_add(*static_const_enums, decl.name, _enum);
+            context.generator.global_scope.members[idx] = _enum;
+            break;
+        }
+
+        if sc_enum {
+            _enum, found1 := table_find(*static_const_enums, decl.name);
+            _decl, found2 := table_find(*missing_flag_bits, decl.name);
+            if found1 && found2 {
+                type := New(CType);
+                type.type_of_enum = _enum;
+                type.size = _enum.type.size;
+                _decl.type = type;
+            }
+        }
+    }
+    else if decl.kind == .DECLARATION {
+        if decl.expression && decl.expression.kind == .LITERAL {
+            literal := cast(*Literal) decl.expression;
+            if literal.literal_kind == .INTEGER {
+                for en : STATIC_CONST_ENUMS {
+                    if !starts_with(decl.name, en[1]) then continue;
+                    _enum, found := table_find(*static_const_enums, en[0]);
+                    if !found then continue;
+
+                    e := New(Enum.Enumerate);
+                    e.name           = decl.name;
+                    e.location       = decl.location;
+                    e.comment        = decl.comment;
+                    e.unsigned_value = (cast(*u64) *literal.int_value).*;
+
+                    e.output_name = decl.name;
+                    advance(*e.output_name, en[1].count + 1);
+                    bit_index := find_index_from_left(e.output_name, "_BIT");
+                    if bit_index != -1 {
+                        out             := e.output_name;
+                        enum_value_name := slice(out, 0, bit_index);
+                        ext_length      := out.count - (bit_index + 4);
+                        enum_value_ext  := slice(out, bit_index + 4, ext_length);
+                        e.output_name   = join(enum_value_name, enum_value_ext);
+                    }
+
+                    array_add(*_enum.enumerates, e);
+                    decl.decl_flags |= .OMIT_FROM_OUTPUT;
+                    return .STOP;
+                }
+            }
+        }
     }
 
     if decl.kind == .ENUM {
@@ -292,11 +383,8 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
                     enum_value_name := slice(out, 0, bit_index);
                     ext_length      := out.count - (bit_index + 4);
                     enum_value_ext  := slice(out, bit_index + 4, ext_length);
-                    new_name        := join(enum_value_name, enum_value_ext);
-                    it.output_name   = new_name;
+                    it.output_name   = join(enum_value_name, enum_value_ext);
                 }
-
-
             }
 
             // Remember this so we can replace the generic VkFlags aliases with the actual enum_flag's type below. :VkFlags
@@ -315,11 +403,11 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
 
     //
     // Replace typedef which has "VkFlags" as value. :VkFlags
-    // VkAccessFlags :: VkFlags   ->   VkAccessFlags :: VkAccessFlagBits;
+    // VkAccessFlags  :: VkFlags     ->   VkAccessFlags :: VkAccessFlagBits;
+    // VkAccessFlags2 :: VkFlags64   ->   VkAccessFlags :: VkAccessFlagBits2;
     // We don't change the name of the FlagBits enum directly because both the ...FlagBits and the ...Flags aliases are used in declarations.
     //
-    if decl.kind == .TYPEDEF && decl.type.type_of_typedef &&  decl.type.type_of_typedef.name == "VkFlags" {
-        //print("TYPEDEF(VkFlags):%\n", << decl.name);
+    if decl.kind == .TYPEDEF && decl.type.type_of_typedef && (decl.type.type_of_typedef.name == "VkFlags" || decl.type.type_of_typedef.name == "VkFlags64") {
         flags_name := replace(decl.name, "Flags", "FlagBits");
         enum_decl, found := table_find(*available_flag_bits, flags_name);
         if found {
@@ -327,6 +415,9 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
             type.type_of_enum = enum_decl;
             type.size = enum_decl.type.size;
             decl.type = type;
+        }
+        else {
+            table_add(*missing_flag_bits, flags_name, cast(*Typedef) decl);
         }
     }
 
@@ -467,6 +558,10 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
     return .RECURSE;
 }
 
+//--------------------
+
+#scope_file
+
 get_sType_default_value_from_struct_name :: (name: string) -> string {
     assert(name.count >= 3);
 
@@ -505,8 +600,6 @@ get_sType_default_value_from_struct_name :: (name: string) -> string {
 
     return builder_to_string(*builder);
 }
-
-#scope_file
 
 #if      OS == .WINDOWS { VULKAN_FOOTER :: "#import \"Windows\";\n"; }
 else #if OS == .LINUX   { VULKAN_FOOTER :: "#import \"X11\";\n";     }
