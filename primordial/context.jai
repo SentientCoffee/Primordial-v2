@@ -7,7 +7,7 @@ setup_context :: (highest_logger_level := Logger_Level.Info, logger_flags := Log
     set_logger_flags(logger_flags);
 }
 
-set_highest_logger_level :: inline (level : Logger_Level) {
+set_highest_logger_level :: inline (level: Logger_Level) {
     if      level >= .Info  then context.log_level = .NORMAL;
     else if level >= .Debug then context.log_level = .VERBOSE;
     else                         context.log_level = .VERY_VERBOSE;
@@ -15,7 +15,7 @@ set_highest_logger_level :: inline (level : Logger_Level) {
     highest_logger_level = level;
 }
 
-set_logger_flags :: inline (flags : Logger_Flags) {
+set_logger_flags :: inline (flags: Logger_Flags) {
     logger_flags = flags;
 }
 
@@ -42,7 +42,7 @@ Logger_Section :: enum {
     Vulkan;
 }
 
-log_trace :: (fmt : string, args : ..Any, loc := #caller_location, section := Logger_Section.None) {
+log_trace :: (fmt: string, args: ..Any, loc := #caller_location, section := Logger_Section.None) {
     if highest_logger_level > .Trace then return;
 
     data := cast(*Logger_Data) context.logger_data;
@@ -53,7 +53,7 @@ log_trace :: (fmt : string, args : ..Any, loc := #caller_location, section := Lo
     log(fmt, ..args, loc = loc);
 } @PrintLike
 
-log_debug :: (fmt : string, args : ..Any, loc := #caller_location, section := Logger_Section.None) {
+log_debug :: (fmt: string, args: ..Any, loc := #caller_location, section := Logger_Section.None) {
     if highest_logger_level > .Debug then return;
 
     data := cast(*Logger_Data) context.logger_data;
@@ -64,7 +64,7 @@ log_debug :: (fmt : string, args : ..Any, loc := #caller_location, section := Lo
     log(fmt, ..args, loc = loc);
 } @PrintLike
 
-log_info :: (fmt : string, args : ..Any, loc := #caller_location, section := Logger_Section.None) {
+log_info :: (fmt: string, args: ..Any, loc := #caller_location, section := Logger_Section.None) {
     if highest_logger_level > .Info then return;
 
     data := cast(*Logger_Data) context.logger_data;
@@ -75,7 +75,7 @@ log_info :: (fmt : string, args : ..Any, loc := #caller_location, section := Log
     log(fmt, ..args, loc = loc);
 } @PrintLike
 
-log_warning :: (fmt : string, args : ..Any, loc := #caller_location, section := Logger_Section.None) {
+log_warning :: (fmt: string, args: ..Any, loc := #caller_location, section := Logger_Section.None) {
     if highest_logger_level > .Warning then return;
 
     data := cast(*Logger_Data) context.logger_data;
@@ -86,7 +86,7 @@ log_warning :: (fmt : string, args : ..Any, loc := #caller_location, section := 
     log(fmt, ..args, loc = loc);
 } @PrintLike
 
-log_error :: (fmt : string, args : ..Any, loc := #caller_location, section := Logger_Section.None) {
+log_error :: (fmt: string, args: ..Any, loc := #caller_location, section := Logger_Section.None) {
     if highest_logger_level > .Error then return;
 
     data := cast(*Logger_Data) context.logger_data;
@@ -97,7 +97,7 @@ log_error :: (fmt : string, args : ..Any, loc := #caller_location, section := Lo
     log(fmt, ..args, loc = loc);
 } @PrintLike
 
-log_fatal :: (fmt : string, args : ..Any, loc := #caller_location, section := Logger_Section.None) {
+log_fatal :: (fmt: string, args: ..Any, loc := #caller_location, section := Logger_Section.None) {
     if highest_logger_level > .Fatal then return;
 
     data := cast(*Logger_Data) context.logger_data;
@@ -126,9 +126,9 @@ log_indent_scope :: () #expand {
 // -------------------------------------------------------
 
 vk_debug_callback :: (
-    message_severity   : Vk.DebugUtilsMessageSeverityFlagsEXT,
-    message_type_flags : Vk.DebugUtilsMessageTypeFlagsEXT,
-    callback_data      : *Vk.DebugUtilsMessengerCallbackDataEXT,
+    message_severity:   Vk.DebugUtilsMessageSeverityFlagsEXT,
+    message_type_flags: Vk.DebugUtilsMessageTypeFlagsEXT,
+    callback_data:      *Vk.DebugUtilsMessengerCallbackDataEXT,
     user_data          : *void
 ) -> Vk.Bool32 #c_call {
     message_id_number := callback_data.messageIdNumber;
@@ -157,9 +157,9 @@ logger_flags         := Logger_Flags.Level | .Terminal_Color;
 
 logger_data := Logger_Data.{};
 Logger_Data :: struct {
-    level     : Logger_Level;
-    section   : Logger_Section;
-    proc_name : string;
+    level:     Logger_Level;
+    section:   Logger_Section;
+    proc_name: string;
 }
 
 indent       := "|";
@@ -186,7 +186,7 @@ get_procedure_name :: () -> string #expand {
     return context.stack_trace.next.info.name;
 }
 
-console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
+console_logger_proc :: (msg: string, logger_data: *void, info: Log_Info) {
     message := msg;
     flags   := logger_flags;
     data    := cast(*Logger_Data) logger_data;
@@ -196,9 +196,9 @@ console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
         message.count -= 1;
     }
 
-    builder := string_builder_make();
+    builder := builder_make();
     {
-        section_name : string;
+        section_name: string;
         if      data.section != .None                     then section_name = tprint("%", data.section);
         else if info.section && info.section.name         then section_name = info.section.name;
         else if (flags & .Level) && (data.level != .None) then section_name = tprint("%", data.level);
@@ -206,10 +206,10 @@ console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
         else if info.common_flags & .WARNING              then section_name = "External Warning";
         else                                                   section_name = "External Log";
 
-        string_builder_append(*builder, #char "[");
+        builder_append(*builder, #char "[");
         to_append := largest_section_name_count - section_name.count;
-        for 1..to_append  string_builder_append(*builder, " ");
-        string_builder_print(*builder, "%]", section_name);
+        for 1..to_append  builder_append(*builder, " ");
+        builder_print(*builder, "%]", section_name);
     }
 
     {
@@ -221,10 +221,10 @@ console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
         reported_location := tprint("%:%:%", reported_proc, info.location.line_number, info.location.character_number);
         if largest_reported_location_count < reported_location.count then largest_reported_location_count = reported_location.count;
 
-        string_builder_append(*builder, #char "[");
+        builder_append(*builder, #char "[");
         to_append := largest_reported_location_count - reported_location.count;
-        for 1..to_append  string_builder_append(*builder, " ");
-        string_builder_print(*builder, "%] ", reported_location);
+        for 1..to_append  builder_append(*builder, " ");
+        builder_print(*builder, "%] ", reported_location);
     }
 
     if flags & .Terminal_Color {
@@ -272,9 +272,9 @@ console_logger_proc :: (msg : string, logger_data : *void, info : Log_Info) {
 
 // -------------------------------------------------------
 
-assert_proc :: (loc : Source_Code_Location, message : string) -> bool {
-    sb := string_builder_make();
-    string_builder_print(*sb, "%\n", message);
+assert_proc :: (loc: Source_Code_Location, message: string) -> bool {
+    sb := builder_make();
+    builder_print(*sb, "%\n", message);
 
     node := context.stack_trace;
 
@@ -300,7 +300,7 @@ assert_proc :: (loc : Source_Code_Location, message : string) -> bool {
         if max_loc_count       < reported_loc_count then max_loc_count       = reported_loc_count;
     }
 
-    string_builder_append(*sb, "Call stack:\n");
+    builder_append(*sb, "Call stack:\n");
     node = context.stack_trace;
     while node {
         defer node = node.next;
@@ -315,16 +315,16 @@ assert_proc :: (loc : Source_Code_Location, message : string) -> bool {
             proc_name = node.info.name;
         }
 
-        string_builder_print(*sb, "    [%] %", node.call_depth, proc_name);
+        builder_print(*sb, "    [%] %", node.call_depth, proc_name);
         to_append := max_proc_name_count - proc_name.count + 1; // @Note: +1 to get a trailing space
-        for 1..to_append  string_builder_append(*sb, #char " ");
+        for 1..to_append  builder_append(*sb, #char " ");
 
         reported_loc_count := file_name.count + tprint("%", node.line_number).count + 1; // @Note: +1 for the colon in between
-        string_builder_print(*sb, "@ %:%", file_name, node.line_number);
+        builder_print(*sb, "@ %:%", file_name, node.line_number);
         to_append = max_loc_count - reported_loc_count + 1;                              // @Note: +1 to get a trailing space
-        for 1..to_append  string_builder_append(*sb, #char " ");
+        for 1..to_append  builder_append(*sb, #char " ");
 
-        string_builder_print(*sb, "(hash 0x%)\n", FormatInt.{value = node.hash, base = 16, comma_string = "_", digits_per_comma = 4});
+        builder_print(*sb, "(hash 0x%)\n", FormatInt.{value = node.hash, base = 16, comma_string = "_", digits_per_comma = 4});
     }
 
     log_fatal(builder_to_string(*sb), loc = loc, section = .Assert);
@@ -364,8 +364,8 @@ attach_to_debugger :: () -> bool {
 
         remedy_cmd := tprint("remedybg.exe attach-to-process-by-id %1 --jit-event-handle %1", Win32.GetCurrentProcessId());
 
-        sSi : Win32.STARTUPINFOW;
-        sPi : Win32.PROCESS_INFORMATION;
+        sSi: Win32.STARTUPINFOW;
+        sPi: Win32.PROCESS_INFORMATION;
         defer if sPi.hThread  then Win32.CloseHandle(sPi.hThread);
         defer if sPi.hProcess then Win32.CloseHandle(sPi.hProcess);
 
@@ -378,7 +378,7 @@ attach_to_debugger :: () -> bool {
 
             Win32.WaitForSingleObject(sPi.hProcess, Win32.INFINITE);
 
-            dwExitCode : u32;
+            dwExitCode: u32;
             Win32.GetExitCodeProcess(sPi.hProcess, *dwExitCode);
             if dwExitCode != 0 then return false; // @Note: If exit code is zero, a debugger was selected
         }

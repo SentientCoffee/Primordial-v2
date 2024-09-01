@@ -1,16 +1,16 @@
-#add_context vk : struct {
-    module      : *void;
-    instance    : Instance;
-    surface     : Surface;
-    device      : Device;
-    swapchain   : Swapchain;
-    render_pass : Render_Pass;
+#add_context vk: struct {
+    module:      *void;
+    instance:    Instance;
+    surface:     Surface;
+    device:      Device;
+    swapchain:   Swapchain;
+    render_pass: Render_Pass;
 }
 
 // -------------------------------------------------------
 
 Instance :: struct {
-    handle : Vk.Instance;
+    handle: Vk.Instance;
 
     #if OS == .WINDOWS {
         extensions :: *u8.[
@@ -33,8 +33,8 @@ Instance :: struct {
 }
 
 Surface :: struct {
-    handle : Vk.SurfaceKHR;
-    format : Vk.SurfaceFormatKHR;
+    handle: Vk.SurfaceKHR;
+    format: Vk.SurfaceFormatKHR;
 }
 
 // -------------------------------------------------------
@@ -46,11 +46,11 @@ Queue_Family_Index_Type :: enum {
 }
 
 Device :: struct {
-    handle               : Vk.Device;
-    physical_device      : Vk.PhysicalDevice;
-    using properties     : Vk.PhysicalDeviceProperties;
-    queue_family_indices : Enum_Array(Queue_Family_Index_Type, u32);
-    depth_format         : Vk.Format;
+    handle:               Vk.Device;
+    physical_device:      Vk.PhysicalDevice;
+    using properties:     Vk.PhysicalDeviceProperties;
+    queues:               Enum_Array(Queue_Family_Index, Queue);
+    depth_format:         Vk.Format;
 
     extensions :: *u8.[
         Vk.KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -70,7 +70,7 @@ get_physical_device_info :: () {
 
     log_info("Physical device: % (0x%)", device_name, FormatInt.{value = device_props.deviceID, base = 16});
 
-    builder := string_builder_make();
+    builder := builder_make();
 
     for available_ext : device_extensions {
         avail_ext_name := to_string(available_ext.extensionName.data);
@@ -84,10 +84,10 @@ get_physical_device_info :: () {
             }
         }
 
-        if is_req then string_builder_print(*builder, "\x1b[32m%\x1b[0m", avail_ext_name);
-        else           string_builder_print(*builder, "%", avail_ext_name);
+        if is_req then builder_print(*builder, "\x1b[32m%\x1b[0m", avail_ext_name);
+        else           builder_print(*builder, "%", avail_ext_name);
 
-        if it_index < device_extensions.count-1 then string_builder_append(*builder, ", ");
+        if it_index < device_extensions.count-1 then builder_append(*builder, ", ");
     }
 
     log_trace("Device extensions: %", builder_to_string(*builder));
@@ -96,16 +96,16 @@ get_physical_device_info :: () {
 // -------------------------------------------------------
 
 Buffer_With_Memory :: struct {
-    buffer : Vk.Buffer;
-    memory : Vk.DeviceMemory;
+    buffer: Vk.Buffer;
+    memory: Vk.DeviceMemory;
 }
 
-get_memory_type_index :: (memory_property_flags : Vk.MemoryPropertyFlags, memory_type_bits : u32) -> u32 {
+get_memory_type_index :: (memory_property_flags: Vk.MemoryPropertyFlags, memory_type_bits: u32) -> u32 {
     physical_device   := context.vk.device.physical_device;
     memory_properties := Vk.get_physical_device_memory_properties(physical_device);
 
-    memory_types := array_view(memory_properties.memoryTypes, 0, memory_properties.memoryTypeCount);
-    memory_type_index : u32;
+    memory_types      := array_view(memory_properties.memoryTypes, 0, memory_properties.memoryTypeCount);
+    memory_type_index := max_of_type(u32);
     for memory_types {
         idx := cast(u32) it_index;
         is_compatible_memory_type  := (memory_type_bits & (1 << idx)) != 0;
@@ -119,10 +119,10 @@ get_memory_type_index :: (memory_property_flags : Vk.MemoryPropertyFlags, memory
     return memory_type_index;
 }
 
-buffer_with_memory_make :: (size : Vk.DeviceSize, usage : Vk.BufferUsageFlags, memory_property_flags : Vk.MemoryPropertyFlags) -> Buffer_With_Memory, Vk.Result {
+buffer_with_memory_make :: (size: Vk.DeviceSize, usage: Vk.BufferUsageFlags, memory_property_flags: Vk.MemoryPropertyFlags) -> Buffer_With_Memory, Vk.Result {
     device := context.vk.device.handle;
-    buffer : Buffer_With_Memory;
-    result : Vk.Result;
+    buffer: Buffer_With_Memory;
+    result: Vk.Result;
 
     buffer_ci := Vk.BufferCreateInfo.{
         size        = size,
@@ -148,7 +148,7 @@ buffer_with_memory_make :: (size : Vk.DeviceSize, usage : Vk.BufferUsageFlags, m
     return buffer, result;
 }
 
-buffer_with_memory_destroy :: (buffer : Buffer_With_Memory) {
+buffer_with_memory_destroy :: (buffer: Buffer_With_Memory) {
     Vk.free_memory(context.vk.device.handle, buffer.memory);
     Vk.destroy_buffer(context.vk.device.handle, buffer.buffer);
 }
@@ -156,17 +156,17 @@ buffer_with_memory_destroy :: (buffer : Buffer_With_Memory) {
 // -------------------------------------------------------
 
 Image :: struct {
-    image   : Vk.Image;
-    view    : Vk.ImageView;
-    memory  : Vk.DeviceMemory;
+    image:   Vk.Image;
+    view:    Vk.ImageView;
+    memory:  Vk.DeviceMemory;
 
-    format : Vk.Format;
+    format: Vk.Format;
 }
 
-image_make :: (width : u32, height : u32, format : Vk.Format, tiling : Vk.ImageTiling, usage : Vk.ImageUsageFlags, memory_property_flags : Vk.MemoryPropertyFlags) -> Image, Vk.Result {
+image_make :: (width: u32, height: u32, format: Vk.Format, tiling: Vk.ImageTiling, usage: Vk.ImageUsageFlags, memory_property_flags: Vk.MemoryPropertyFlags) -> Image, Vk.Result {
     device := context.vk.device.handle;
-    image  : Image;
-    result : Vk.Result;
+    image:  Image;
+    result: Vk.Result;
 
     image_ci := Vk.ImageCreateInfo.{
         imageType     = ._2D,
@@ -202,7 +202,7 @@ image_make :: (width : u32, height : u32, format : Vk.Format, tiling : Vk.ImageT
     return image, result;
 }
 
-image_view_make :: (image : *Image, aspect_flags : Vk.ImageAspectFlags) -> Vk.Result {
+image_view_make :: (image: *Image, aspect_flags: Vk.ImageAspectFlags) -> Vk.Result {
     view_ci := Vk.ImageViewCreateInfo.{
         image            = image.image,
         viewType         = ._2D,
@@ -225,14 +225,14 @@ image_view_make :: (image : *Image, aspect_flags : Vk.ImageAspectFlags) -> Vk.Re
     return result;
 }
 
-image_destroy :: (image : Image) {
+image_destroy :: (image: Image) {
     Vk.free_memory(context.vk.device.handle, image.memory);
     Vk.destroy_image(context.vk.device.handle, image.image);
     Vk.destroy_image_view(context.vk.device.handle, image.view);
 }
 
-cmd_image_transition :: (cmdbuf : Vk.CommandBuffer, image : Image, old_layout : Vk.ImageLayout, new_layout : Vk.ImageLayout) {
-    aspect_mask : Vk.ImageAspectFlags = ifx new_layout == .DEPTH_ATTACHMENT_OPTIMAL then .DEPTH else .COLOR;
+cmd_image_transition :: (cmdbuf: Vk.CommandBuffer, image: Image, old_layout: Vk.ImageLayout, new_layout: Vk.ImageLayout) {
+    aspect_mask: Vk.ImageAspectFlags = ifx new_layout == .DEPTH_ATTACHMENT_OPTIMAL then .DEPTH else .COLOR;
 
     image_barrier := Vk.ImageMemoryBarrier2.{
         image           = image.image,
@@ -264,15 +264,15 @@ cmd_image_transition :: (cmdbuf : Vk.CommandBuffer, image : Image, old_layout : 
 // -------------------------------------------------------
 
 Render_Pass :: struct {
-    handle      : Vk.RenderPass;
-    attachments : []Vk.AttachmentDescription; @Color @Depth
+    handle:      Vk.RenderPass;
+    attachments: []Vk.AttachmentDescription; @Color @Depth
 }
 
-render_pass_make :: (device : Device, surface : Surface) -> Render_Pass {
+render_pass_make :: (device: Device, surface: Surface) -> Render_Pass {
     log_debug("Creating render pass...");
     log_indent_scope();
 
-    render_pass : Render_Pass;
+    render_pass: Render_Pass;
 
     render_pass.attachments = Vk.AttachmentDescription.[
         .{
@@ -337,31 +337,31 @@ render_pass_make :: (device : Device, surface : Surface) -> Render_Pass {
     return render_pass;
 }
 
-render_pass_destroy :: (device : Device, render_pass : Render_Pass) {
+render_pass_destroy :: (device: Device, render_pass: Render_Pass) {
     Vk.destroy_render_pass(device.handle, render_pass.handle);
 }
 
 // -------------------------------------------------------
 
 Swapchain :: struct {
-    handle       : Vk.SwapchainKHR;
-    using extent : Vk.Extent2D;
-    present_mode : Vk.PresentModeKHR;
+    handle:       Vk.SwapchainKHR;
+    using extent: Vk.Extent2D;
+    present_mode: Vk.PresentModeKHR;
 
-    image_views  : []Vk.ImageView;
-    framebuffers : []Vk.Framebuffer;
+    image_views:  []Vk.ImageView;
+    framebuffers: []Vk.Framebuffer;
 
-    depth_image : Image;
+    depth_image: Image;
 }
 
-swapchain_make :: (width : int, height : int) {
+swapchain_make :: (width: int, height: int) {
     log_debug("Creating swapchain...");
     log_indent_scope();
 
     device  := *context.vk.device;
     surface := *context.vk.surface;
 
-    swapchain : Swapchain;
+    swapchain: Swapchain;
 
     surface_capabilities := Vk.get_physical_device_surface_capabilities(device.physical_device, surface.handle);
     swapchain.present_mode = Vk.PresentModeKHR.FIFO_KHR;
@@ -483,7 +483,7 @@ swapchain_destroy :: () {
     Vk.destroy_swapchain(context.vk.device.handle, context.vk.swapchain.handle);
 }
 
-recreate_swapchain :: (width : int, height : int) {
+recreate_swapchain :: (width: int, height: int) {
     log_info("Recreating swapchain: %x%", width, height);
     swapchain_destroy();
     swapchain_make(width, height);
@@ -492,13 +492,13 @@ recreate_swapchain :: (width : int, height : int) {
 // -------------------------------------------------------
 
 Frame_Sync :: struct {
-    swapchain_image_sem : Vk.Semaphore;
-    render_finished_sem : Vk.Semaphore;
-    in_flight_fence     : Vk.Fence;
+    swapchain_image_sem: Vk.Semaphore;
+    render_finished_sem: Vk.Semaphore;
+    in_flight_fence:     Vk.Fence;
 }
 
 frame_sync_make :: () -> Frame_Sync, Vk.Result {
-    frame_sync : Frame_Sync;
+    frame_sync: Frame_Sync;
 
     {
         sem, result := Vk.create_semaphore(context.vk.device.handle, *(Vk.SemaphoreCreateInfo.{}));
@@ -522,7 +522,7 @@ frame_sync_make :: () -> Frame_Sync, Vk.Result {
     return frame_sync, .SUCCESS;
 }
 
-frame_sync_destroy :: (using frame_sync : Frame_Sync) {
+frame_sync_destroy :: (using frame_sync: Frame_Sync) {
     Vk.destroy_semaphore(context.vk.device.handle, swapchain_image_sem);
     Vk.destroy_semaphore(context.vk.device.handle, render_finished_sem);
     Vk.destroy_fence(context.vk.device.handle, in_flight_fence);
@@ -542,7 +542,7 @@ frame_sync_destroy :: (using frame_sync : Frame_Sync) {
         FreeLibrary(xx context.vk.module, null, flags = 0);
     }
 
-    vulkan_proc_loader :: (proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction {
+    vulkan_proc_loader :: (proc_name: *u8, user_data: *void) -> Vk.PFN_vkVoidFunction {
         assert(context.vk.module != null, "Must load the vk_module before loading global proc addresses!");
         return xx GetProcAddress(xx context.vk.module, proc_name);
     }
@@ -562,7 +562,7 @@ else #if OS == .LINUX {
         dlclose(context.vk.module);
     }
 
-    vulkan_proc_loader :: (proc_name : *u8, user_data : *void) -> Vk.PFN_vkVoidFunction {
+    vulkan_proc_loader :: (proc_name: *u8, user_data: *void) -> Vk.PFN_vkVoidFunction {
         assert(context.vk.module != null, "Must load the vk_module before loading global proc addresses!");
         return dlsym(context.vk.module, proc_name);
     }

@@ -27,7 +27,7 @@ DEBUG_SHADERCOMP_OUTPUT :: true;
 build :: () {
     set_build_options_dc(.{do_output=false});
 
-    jai_version : Version_Info;
+    jai_version: Version_Info;
     print("Jai version: %\n", compiler_get_version_info(*jai_version));
     if jai_version.major < 0 || jai_version.minor < 1 || jai_version.micro < 81 {
         print("This program requires Jai version 0.1.81 or higher!\n");
@@ -80,8 +80,8 @@ build :: () {
     asset_table_string := generate_asset_table();
     print("----------");
 
-    // import_paths_to_check : [..]string;
-    shader_attributes : Enum_Array(Shader_Stage, *Type_Info);
+    // import_paths_to_check: [..]string;
+    shader_attributes: Enum_Array(Shader_Stage, *Type_Info);
     compiler_begin_intercept(w_debug);
     {
         build_strings_inserted := false;
@@ -179,11 +179,11 @@ generate_asset_table :: () -> string {
         array_add(user_data, new_info);
     }
 
-    asset_table_string : String_Builder;
+    asset_table_string: String_Builder;
     append(*asset_table_string, "asset_table :: #run -> Hash_Table(string, string) {\n");
-    append(*asset_table_string, "    table : Hash_Table(string, string);\n\n");
+    append(*asset_table_string, "    table: Hash_Table(string, string);\n\n");
 
-    found : [..]File_Visit_Info;
+    found: [..]File_Visit_Info;
     defer array_free(found);
     found.allocator = temp;
 
@@ -215,7 +215,7 @@ generate_asset_table :: () -> string {
     return builder_to_string(*asset_table_string);
 }
 
-copy_shared_libs_to_output :: (exe_path : string) {
+copy_shared_libs_to_output :: (exe_path: string) {
     find_dlls :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
         if !ends_with(info.short_name, ".dll") then return;
 
@@ -235,7 +235,7 @@ copy_shared_libs_to_output :: (exe_path : string) {
     }
 
     for path : MODULE_IMPORT_PATHS {
-        found : [..]File_Visit_Info;
+        found: [..]File_Visit_Info;
         found.allocator = temp;
 
         #if OS == .WINDOWS {
@@ -252,7 +252,7 @@ copy_shared_libs_to_output :: (exe_path : string) {
     }
 }
 
-compile_shaders :: (shader_attributes : Enum_Array(Shader_Stage, *Type_Info)) -> bool {
+compile_shaders :: (shader_attributes: Enum_Array(Shader_Stage, *Type_Info)) -> bool {
     find_shader_sources :: (info: *File_Visit_Info, user_data: *[..]File_Visit_Info) {
         if !ends_with(info.short_name, ".glsl") then return;
 
@@ -263,7 +263,7 @@ compile_shaders :: (shader_attributes : Enum_Array(Shader_Stage, *Type_Info)) ->
         array_add(user_data, new_info);
     }
 
-    found : [..]File_Visit_Info;
+    found: [..]File_Visit_Info;
     visit_files(dir_name = tprint("%/shaders", ASSET_DIR), recursive = true, user_data = *found, proc = find_shader_sources);
     for found {
         success := compile_shader(it.full_name, shader_attributes);
@@ -291,13 +291,13 @@ run :: () -> bool {
 
 // -------------------------------------------------------
 
-aggregate_import_paths :: (paths : ..[]string) -> []string {
+aggregate_import_paths :: (paths: ..[]string) -> []string {
     total_size := 0;
     for paths {
         total_size += it.count;
     }
 
-    aggregated : [..] string;
+    aggregated: [..] string;
     for p : paths {
         for p  array_add_if_unique(*aggregated, it);
     }

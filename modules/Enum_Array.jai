@@ -1,4 +1,5 @@
-Enum_Array :: struct(Enum : Type, T : Type) #modify {
+Enum_Array :: struct(Enum: Type, T: Type)
+#modify {
     ti := cast(*Type_Info) Enum;
     if ti.type != .ENUM then return false, "Enum_Array needs an enum as the first struct argument.";
 
@@ -12,20 +13,21 @@ Enum_Array :: struct(Enum : Type, T : Type) #modify {
         min, max := enum_range(Enum);
         return max - min + 1;
     }
-    array : [count]T;
+
+    array: [count]T;
 }
 
 // -------------------------------------------------------
 // @Note: These are just convenience functions if you don't want to write enum_array[Enum.Value]
 //        (because the enum name might be super long and unary '.' enum dereferencing doesn't work)
 
-get :: (enum_array : Enum_Array, en : enum_array.Enum) -> value : enum_array.T {
-    i := index_from_enum(en);
+get :: (enum_array: Enum_Array, en: enum_array.Enum) -> value: enum_array.T {
+    i := index_from_enum_value(en);
     return enum_array.array[i];
 }
 
-set :: (enum_array : *Enum_Array, en : enum_array.Enum, value : enum_array.T) {
-    i := index_from_enum(en);
+set :: (enum_array: *Enum_Array, en: enum_array.Enum, value: enum_array.T) {
+    i := index_from_enum_value(en);
     enum_array.array[i] = value;
 }
 
@@ -33,18 +35,18 @@ set :: (enum_array : *Enum_Array, en : enum_array.Enum, value : enum_array.T) {
 
 // @Note: The only reason this works is because enums are integer-adjacent, meaning that operator *[] will accept them as arguments.
 //        However, unary enum dereferencing (i.e. '.Value' instead of 'Enum.Value') will not work, because they are technically not supported.
-operator *[] :: (enum_array : Enum_Array, en : enum_array.Enum) -> *enum_array.T {
-    i := index_from_enum(en);
+operator *[] :: (enum_array: Enum_Array, en: enum_array.Enum) -> *enum_array.T {
+    i := index_from_enum_value(en);
     return *enum_array.array[i];
 }
 
-for_expansion :: (enum_array : *Enum_Array, body : Code, flags : For_Flags) #expand {
+for_expansion :: (enum_array: *Enum_Array, body: Code, flags: For_Flags) #expand {
     REVERSE :: (flags & .REVERSE) != 0;
     POINTER :: (flags & .POINTER) != 0;
 
     for <=REVERSE *=POINTER value, idx : enum_array.array {
         `it := value;
-        `it_index := enum_from_index(enum_array.Enum, idx);
+        `it_index := enum_value_from_index(enum_array.Enum, idx);
 
         #insert body;
     }
@@ -54,7 +56,8 @@ for_expansion :: (enum_array : *Enum_Array, body : Code, flags : For_Flags) #exp
 
 #scope_file
 
-index_from_enum :: (e : $Enum) -> int #modify {
+index_from_enum_value :: (e: $Enum) -> int
+#modify {
     ti := cast(*Type_Info) Enum;
     if ti.type != .ENUM then return false, "Given input to convert from is not an enum.";
     return true;
@@ -66,7 +69,8 @@ index_from_enum :: (e : $Enum) -> int #modify {
     return (cast(s64) e) - min;
 }
 
-enum_from_index :: ($Enum : Type, i : int) -> Enum #modify {
+enum_value_from_index :: ($Enum: Type, i: int) -> Enum
+#modify {
     ti := cast(*Type_Info) Enum;
     if ti.type != .ENUM then return false, "Given type to convert to is not an enum.";
     return true;

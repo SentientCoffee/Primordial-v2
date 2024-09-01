@@ -34,7 +34,7 @@ else {
 
         libclang_path := "build/libclang.dll";
         if !file_exists(libclang_path) {
-            log_error("We need libclang.dll to be able to generate bindings...Exiting.");
+            log_error("We need libclang.dll to be able to generate bindings... Exiting.");
             compiler_set_workspace_status(.FAILED);
         }
     }
@@ -92,13 +92,13 @@ STATIC_CONST_ENUMS :: ([2]string).[
 ];
 
 ProcName :: struct {
-    name        : string;
-    output_name : string;
+    name:        string;
+    output_name: string;
 }
 
-global_procs   : [..]ProcName;
-instance_procs : [..]ProcName;
-device_procs   : [..]ProcName;
+global_procs:   [..]ProcName;
+instance_procs: [..]ProcName;
+device_procs:   [..]ProcName;
 
 generate_bindings :: () -> bool {
     #if OS != .WINDOWS && OS != .LINUX {
@@ -173,7 +173,7 @@ generate_loader :: () -> bool {
     }
     print("Generating \"%\"... ", loader_filename);
 
-    loader_builder : String_Builder;
+    loader_builder: String_Builder;
     init_string_builder(*loader_builder);
 
     append(*loader_builder, "//\n// Generated loader file. Do not modify.\n//\n\n");
@@ -244,10 +244,10 @@ generate_loader :: () -> bool {
     return true;
 }
 
-missing_flag_bits   : Hash_Table(string, *Typedef);
-available_flag_bits : Hash_Table(string, *Enum);
-static_const_enums  : Hash_Table(string, *Enum);
-struct_type_decl    : *Enum;
+missing_flag_bits:   Hash_Table(string, *Typedef);
+available_flag_bits: Hash_Table(string, *Enum);
+static_const_enums:  Hash_Table(string, *Enum);
+struct_type_decl:    *Enum;
 
 vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_Visit_Result {
     decl.output_name = stripped_name(decl.output_name);
@@ -391,7 +391,7 @@ vulkan_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration
             table_add(*available_flag_bits, decl.name, en);
         }
 
-        existing : [..]string;
+        existing: [..]string;
         for * en.enumerates {
             added := array_add_if_unique(*existing, it.output_name);
             if !added {

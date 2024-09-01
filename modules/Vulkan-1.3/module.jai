@@ -32,14 +32,14 @@ MAX_MEMORY_HEAPS              : u32 : 16;
 MAX_MEMORY_TYPES              : u32 : 32;
 MAX_PHYSICAL_DEVICE_NAME_SIZE : u32 : 256;
 
-MAKE_API_VERSION :: inline (variant : u32, major : u32, minor : u32, patch : u32) -> u32 {
+MAKE_API_VERSION :: inline (variant: u32, major: u32, minor: u32, patch: u32) -> u32 {
     return (variant << 29) | (major << 22) | (minor << 12) | patch;
 }
 
-API_VERSION_VARIANT :: (version : u32) -> u32 { return  version >> 29;          }
-API_VERSION_MAJOR   :: (version : u32) -> u32 { return (version >> 22) & 0x7f;  }
-API_VERSION_MINOR   :: (version : u32) -> u32 { return (version >> 12) & 0x3ff; }
-API_VERSION_PATCH   :: (version : u32) -> u32 { return  version        & 0xfff; }
+API_VERSION_VARIANT :: (version: u32) -> u32 { return  version >> 29;          }
+API_VERSION_MAJOR   :: (version: u32) -> u32 { return (version >> 22) & 0x7f;  }
+API_VERSION_MINOR   :: (version: u32) -> u32 { return (version >> 12) & 0x3ff; }
+API_VERSION_PATCH   :: (version: u32) -> u32 { return  version        & 0xfff; }
 
 API_VERSION_1_0 :: #run MAKE_API_VERSION(0, 1, 0, 0);
 API_VERSION_1_1 :: #run MAKE_API_VERSION(0, 1, 1, 0);
@@ -49,7 +49,7 @@ API_VERSION_1_3 :: #run MAKE_API_VERSION(0, 1, 3, 0);
 HEADER_VERSION_COMPLETE :: #run MAKE_API_VERSION(0, 1, 3, HEADER_VERSION);
 
 // DEPRECATED: This define is deprecated. MAKE_API_VERSION should be used instead.
-MAKE_VERSION :: inline (major : u32, minor : u32, patch : u32) -> u32
+MAKE_VERSION :: inline (major: u32, minor: u32, patch: u32) -> u32
 #deprecated "MAKE_API_VERSION should be used instead." {
     return MAKE_API_VERSION(0, major, minor, patch);
 }

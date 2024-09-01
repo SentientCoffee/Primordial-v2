@@ -16,9 +16,9 @@ window_title  := #run tprint("Vulkan (%)", DRAW_CMD);
 // -------------------------------------------------------
 
 Vertex :: struct {
-    position : Vector3;  @Binding=0 @Location=1
-    color    : Vector3;  @Binding=0 @Location=2
-    uv       : Vector2;  @Binding=0 @Location=3
+    position: Vector3;  @Binding=0 @Location=1
+    color:    Vector3;  @Binding=0 @Location=2
+    uv:       Vector2;  @Binding=0 @Location=3
 }
 
 Uniform_Matrices :: struct {
@@ -29,7 +29,7 @@ Uniform_Matrices :: struct {
 
 // -------------------------------------------------------
 
-DRAW_CMD : enum {
+DRAW_CMD: enum {
     CmdDraw;
     CmdDrawInstanced;
     CmdDrawIndexed;
@@ -136,7 +136,7 @@ MAX_FRAMES_IN_FLIGHT :: 2;
 // -------------------------------------------------------
 
 main :: () {
-    setup_context(highest_logger_level = .Debug, logger_flags = .Level);
+    setup_context(highest_logger_level = .Trace);
 
     // -------------------------------------------------------
     // @Note: Create window
@@ -532,7 +532,7 @@ main :: () {
 
     log_debug("Loading vertex shader...");
     log_indent();
-    vert_shader_bin : string;
+    vert_shader_bin: string;
     {
         shader_name :: "triangle.vert";
 
@@ -556,7 +556,7 @@ main :: () {
 
     log_debug("Loading fragment shader...");
     log_indent();
-    frag_shader_bin : string;
+    frag_shader_bin: string;
     {
         shader_name :: "triangle.frag";
 
@@ -643,7 +643,7 @@ main :: () {
     log_trace("Create descriptor pool = %%");
     defer Vk.destroy_descriptor_pool(context.vk.device.handle, descriptor_pool);
 
-    set_layouts : [MAX_FRAMES_IN_FLIGHT]Vk.DescriptorSetLayout = .[descriptor_set_layout, descriptor_set_layout];
+    set_layouts: [MAX_FRAMES_IN_FLIGHT]Vk.DescriptorSetLayout = .[descriptor_set_layout, descriptor_set_layout];
 
     descriptor_set_ai := Vk.DescriptorSetAllocateInfo.{
         descriptorPool     = descriptor_pool,
@@ -687,12 +687,12 @@ main :: () {
     ];
 
     #insert -> string {
-        builder : String_Builder;
+        builder: String_Builder;
         append(*builder, "vertex_input_attribute_descs := Vk.VertexInputAttributeDescription.[\n");
 
-        members := (cast(*Type_Info_Struct) Vertex).members;
+        members := type_info(Vertex).members;
         for member : members {
-            binding, location, format : string;
+            binding, location, format: string;
             for note : member.notes {
                 BINDING  :: "Binding=";
                 LOCATION :: "Location=";
@@ -859,8 +859,8 @@ main :: () {
     log_debug("Loading texture...");
     log_indent();
 
-    image_pixels  : *u8;
-    image_width, image_height : u32;
+    image_pixels:  *u8;
+    image_width, image_height: u32;
     {
         image_name :: "container";
 
@@ -1090,11 +1090,11 @@ main :: () {
     // @Note: Setup uniforms
 
     Uniform_Buffer :: struct {
-        using buf_mem : Buffer_With_Memory;
-        mapped        : *void;
+        using buf_mem: Buffer_With_Memory;
+        mapped:        *void;
     }
 
-    matrix_uniform_buffers : [MAX_FRAMES_IN_FLIGHT]Uniform_Buffer;
+    matrix_uniform_buffers: [MAX_FRAMES_IN_FLIGHT]Uniform_Buffer;
 
     log_debug("Setting up uniforms (%) ...", MAX_FRAMES_IN_FLIGHT);
     log_indent();
@@ -1174,7 +1174,7 @@ main :: () {
     // -------------------------------------------------------
     // @Note: Create synchronization objects
 
-    frame_syncs : [MAX_FRAMES_IN_FLIGHT]Frame_Sync;
+    frame_syncs: [MAX_FRAMES_IN_FLIGHT]Frame_Sync;
 
     log_debug("Creating frame syncs (%) ...", frame_syncs.count);
     log_indent();
@@ -1194,7 +1194,7 @@ main :: () {
 
     current_frame_idx := 0;
     start_time        := seconds_since_init();
-    current_time      : float64;
+    current_time:      float64;
 
     camera := camera_make(.{0, 4, 4}, .{0, 0, 0});
 
@@ -1271,7 +1271,7 @@ main :: () {
 
         Vk.wait_for_one_fence(device, in_flight_fence);
 
-        swapchain_image_idx : u32;
+        swapchain_image_idx: u32;
         {
             swapchain_image_idx=, result := Vk.acquire_next_image(device, swapchain.handle, semaphore = swapchain_image_sem);
             if result == .ERROR_OUT_OF_DATE_KHR {
@@ -1353,7 +1353,7 @@ main :: () {
 
         aspect := cast(float) swapchain.width / swapchain.height;
 
-        q : Quaternion;
+        q: Quaternion;
         set_from_axis_and_angle(*q, .{0.5, 1.0, 0.5}, cast(float) (current_time * radians(90))); // @Note: Radians
 
         matrix_uniforms := Uniform_Matrices.{
