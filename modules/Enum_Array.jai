@@ -17,6 +17,25 @@ Enum_Array :: struct(Enum: Type, T: Type)
     array: [count]T;
 }
 
+Enum_Struct :: struct(Enum: Type, T: Type)
+#modify {
+    ti := cast(*Type_Info) Enum;
+    if ti.type != .ENUM then return false, "Enum_Array needs an enum as the first struct argument.";
+
+    return true;
+}{
+    #insert -> string {
+        builder: String_Builder;
+
+        ti_e := type_info(Enum);
+        for ti_e.names {
+            print(*builder, "%: %;", it, T);
+        }
+
+        return builder_to_string(*builder);
+    }
+}
+
 // -------------------------------------------------------
 // @Note: These are just convenience functions if you don't want to write enum_array[Enum.Value]
 //        (because the enum name might be super long and unary '.' enum dereferencing doesn't work)

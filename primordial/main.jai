@@ -153,334 +153,22 @@ main :: () {
     Vk.load_global_proc_addresses(vulkan_proc_loader);
 
     // -------------------------------------------------------
-    // @Note: Check that we have all required extensions
+    // @Note: Create vulkan instance with debug messenger
 
-    {
-        available_instance_extensions, _ := Vk.enumerate_instance_extension_properties(null);
-        defer array_free(available_instance_extensions);
-
-        for req_ext : context.vk.instance.extensions {
-            req_ext_name := to_string(req_ext);
-
-            ext_found := false;
-            for available_ext : available_instance_extensions {
-                avail_ext_name := to_string(available_ext.extensionName.data);
-
-                if req_ext_name == avail_ext_name {
-                    ext_found = true;
-                    break;
-                }
-            }
-
-            assert(ext_found, "Required instance extension \"%\" not found!", req_ext_name);
-        }
-
-        builder := string_builder_make();
-
-        for available_ext : available_instance_extensions {
-            avail_ext_name := to_string(available_ext.extensionName.data);
-
-            is_req := false;
-            for req_ext : context.vk.instance.extensions {
-                req_ext_name := to_string(req_ext);
-                if req_ext_name == avail_ext_name {
-                    is_req = true;
-                    break;
-                }
-            }
-
-            if is_req then string_builder_print(*builder, "\x1b[32m%\x1b[0m", avail_ext_name);
-            else           string_builder_print(*builder, "%", avail_ext_name);
-
-            if it_index < available_instance_extensions.count-1 then string_builder_append(*builder, ", ");
-        }
-
-        log_trace("Instance extensions: %", builder_to_string(*builder));
-    }
+    instance_make();
+    defer instance_destroy();
 
     // -------------------------------------------------------
-    // @Note: Check that we have all required layers (if any)
+    // @Note: Create window surface
 
-    {
-        available_instance_layers, _ := Vk.enumerate_instance_layer_properties();
-        defer array_free(available_instance_layers);
-
-        for req_layer : context.vk.instance.layers {
-            req_layer_name := to_string(req_layer);
-
-            layer_found := false;
-            for available_layer : available_instance_layers {
-                avail_layer_name := to_string(available_layer.layerName.data);
-
-                if req_layer_name == avail_layer_name {
-                    layer_found = true;
-                    break;
-                }
-            }
-
-            assert(layer_found, "Required instance layer % not found!", req_layer_name);
-        }
-
-        builder := string_builder_make();
-
-        for available_layer : available_instance_layers {
-            avail_layer_name := to_string(available_layer.layerName.data);
-
-            is_req := false;
-            for req_layer : context.vk.instance.layers {
-                req_layer_name := to_string(req_layer);
-                if req_layer_name == avail_layer_name {
-                    is_req = true;
-                    break;
-                }
-            }
-
-            if is_req then string_builder_print(*builder, "\x1b[32m%\x1b[0m", avail_layer_name);
-            else           string_builder_print(*builder, "%", avail_layer_name);
-
-            if it_index < available_instance_layers.count-1 then string_builder_append(*builder, ", ");
-        }
-
-        log_trace("Instance layers: %", builder_to_string(*builder));
-    }
+    context.vk.surface = surface_make(app_window);
+    defer surface_destroy();
 
     // -------------------------------------------------------
-    // @Note: Create vulkan instance
+    // @Note: Create logical device and get queue handles
 
-    debug_messenger_ci := Vk.DebugUtilsMessengerCreateInfoEXT.{
-        messageSeverity = .VERBOSE_EXT | .INFO_EXT | .WARNING_EXT | .ERROR_EXT,
-        messageType     = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
-        pfnUserCallback = vk_debug_callback,
-        pUserData       = *context,
-    };
-
-    {
-        app_info := Vk.ApplicationInfo.{
-            pApplicationName   = "Vulkan",
-            applicationVersion = Vk.MAKE_API_VERSION(0, 0, 0, 1),
-            pEngineName        = "No engine",
-            engineVersion      = Vk.MAKE_API_VERSION(0, 0, 0, 1),
-            apiVersion         = Vk.API_VERSION_1_3
-        };
-
-        instance_ci := Vk.InstanceCreateInfo.{
-            pApplicationInfo        = *app_info,
-            enabledExtensionCount   = context.vk.instance.extensions.count,
-            ppEnabledExtensionNames = context.vk.instance.extensions.data,
-            enabledLayerCount       = context.vk.instance.layers.count,
-            ppEnabledLayerNames     = context.vk.instance.layers.data,
-            pNext                   = *debug_messenger_ci,
-        };
-
-        instance, _ := Vk.create_instance(*instance_ci);
-        log_trace("Create instance = %%");
-        context.vk.instance.handle = instance;
-    }
-
-    defer Vk.destroy_instance(context.vk.instance.handle);
-
-    log_debug("Loading instance proc addresses...");
-    Vk.load_instance_proc_addresses(context.vk.instance.handle);
-
-    debug_messenger, _ := Vk.create_debug_utils_messenger(context.vk.instance.handle, *debug_messenger_ci);
-    log_trace("Create debug utils messenger = %%");
-    defer Vk.destroy_debug_utils_messenger(context.vk.instance.handle, debug_messenger);
-
-    // -------------------------------------------------------
-    // @Note: Create vulkan surface
-
-    #if OS == .WINDOWS {
-        Win32 :: #import "Windows";
-        hinstance  := Win32.GetModuleHandleW(null);  // @Todo: Add GetModuleHandleExW to Windows module
-        surface_ci := Vk.Win32SurfaceCreateInfoKHR.{
-            hinstance = hinstance,
-            hwnd      = app_window,
-        };
-
-        surface, _ := Vk.create_win32_surface(context.vk.instance.handle, *surface_ci);
-        log_trace("Create Win32 surface = %%");
-        context.vk.surface.handle = surface;
-    }
-    else #if OS == .LINUX {
-        X11 :: #import "X11";
-        surface_ci := Vk.XlibSurfaceCreateInfoKHR.{
-            dpy    = X11.x_global_display,
-            window = app_window,
-        };
-
-        surface, _ := Vk.create_xlib_surface(context.vk.instance.handle, *surface_ci);
-        log_trace("Create Xlib surface = %%");
-        context.vk.surface.handle = surface;
-    }
-    defer Vk.destroy_surface(context.vk.instance.handle, context.vk.surface.handle);
-
-    // -------------------------------------------------------
-    // @Note: Get the best physical device to create a logical device from
-
-    {
-        available_physical_devices, _ := Vk.enumerate_physical_devices(context.vk.instance.handle);
-        defer array_free(available_physical_devices);
-        assert(available_physical_devices.count > 0, "Physical device with Vulkan support not found!");
-
-        // @Note: For now just pick the first GPU we find that has all the things we need.
-        //        Later we can pick the best one, or make a UI system to pick the GPU.
-        for pd : available_physical_devices {
-            props := Vk.get_physical_device_properties(pd);
-
-            available_device_extensions, _ := Vk.enumerate_device_extension_properties(pd, null);
-            defer array_free(available_device_extensions);
-
-            for req_ext : context.vk.device.extensions {
-                req_ext_name := to_string(req_ext);
-
-                ext_found := false;
-                for available_ext : available_device_extensions {
-                    avail_ext_name := to_string(available_ext.extensionName.data);
-                    if req_ext_name == avail_ext_name {
-                        ext_found = true;
-                        break;
-                    }
-                }
-
-                if !ext_found then continue pd;
-            }
-
-            queue_families := Vk.get_physical_device_queue_family_properties(pd);
-            defer array_free(queue_families);
-
-            has_graphics_support := false;
-            has_transfer_support := false;
-            has_present_support  := false;
-
-            for qf, qf_index : queue_families {
-                if !has_graphics_support {
-                    has_graphics_support = (qf.queueFlags & .GRAPHICS) != 0;
-                }
-                if !has_transfer_support {
-                    has_transfer_support = (qf.queueFlags & .TRANSFER) != 0;
-                }
-                if !has_present_support {
-                    has_present_support, _ = Vk.get_physical_device_surface_support(pd, cast(u32) qf_index, context.vk.surface.handle);
-                }
-            }
-
-            surface_formats, _ := Vk.get_physical_device_surface_formats(pd, context.vk.surface.handle);
-            defer array_free(surface_formats);
-
-            present_modes, _ := Vk.get_physical_device_surface_present_modes(pd, context.vk.surface.handle);
-            defer array_free(present_modes);
-
-            features := Vk.get_physical_device_features(pd);
-
-            log_trace(
-                "% (0x%): Graphics = % | Transfer = % | Present = % | Surface formats = % | Present modes = % | Anisotropy = %",
-                to_string(props.deviceName.data), FormatInt.{value = props.deviceID, base = 16},
-                has_graphics_support, has_transfer_support, has_present_support, surface_formats.count, present_modes.count, features.samplerAnisotropy
-            );
-
-
-            if !has_graphics_support || !has_transfer_support || !has_present_support then continue pd;
-            if surface_formats.count <= 0                                             then continue pd;
-            if present_modes.count   <= 0                                             then continue pd;
-            if features.samplerAnisotropy == .FALSE                                   then continue pd;
-
-            context.vk.device.physical_device = pd;
-            break;
-        }
-
-        assert(context.vk.device.physical_device != null, "Suitable physical device not found!\n");
-        get_physical_device_info();
-    }
-
-    {
-        // -------------------------------------------------------
-        // @Note: Get queue families to create
-
-        queue_families := Vk.get_physical_device_queue_family_properties(context.vk.device.physical_device);
-        defer array_free(queue_families);
-        for * context.vk.device.queue_family_indices  it.* = max_of_type(u32);
-
-        for qf : queue_families {
-            qf_index := cast(u32) it_index;
-
-            is_unset :: (qfit : Queue_Family_Index_Type) -> bool #expand {
-                return context.vk.device.queue_family_indices[qfit] == max_of_type(u32);
-            }
-
-            set_index :: (qfit : Queue_Family_Index_Type) #expand {
-                context.vk.device.queue_family_indices[qfit] = qf_index;
-            }
-
-            if is_unset(.Present) {
-                has_present_support := Vk.get_physical_device_surface_support(context.vk.device.physical_device, qf_index, context.vk.surface.handle);
-                if has_present_support then set_index(.Present);
-            }
-
-            if is_unset(.Graphics) {
-                if (qf.queueFlags & .GRAPHICS) then set_index(.Graphics);
-            }
-            else if is_unset(.Transfer) {
-                if (qf.queueFlags & .TRANSFER) then set_index(.Transfer);
-            }
-
-            all_indices_set := true;
-            for q : context.vk.device.queue_family_indices {
-                if q != max_of_type(u32) then continue;
-
-                all_indices_set = false;
-                break;
-            }
-            if all_indices_set then break;
-        }
-
-        unique_queue_family_indices : [..]u32;
-        defer array_free(unique_queue_family_indices);
-        for context.vk.device.queue_family_indices {
-            array_add_if_unique(*unique_queue_family_indices, it);
-        }
-
-        queue_create_infos := NewArray(unique_queue_family_indices.count, Vk.DeviceQueueCreateInfo);
-        defer array_free(queue_create_infos);
-        for unique_queue_family_indices {
-            queue_priorities := float32.[1.0];
-            queue_create_infos[it_index] = Vk.DeviceQueueCreateInfo.{
-                queueCount       = 1,
-                queueFamilyIndex = it,
-                pQueuePriorities = queue_priorities.data,
-            };
-        }
-
-        // -------------------------------------------------------
-        // @Note: Create logical device and get queue handles
-
-        physical_device_features := Vk.PhysicalDeviceFeatures.{
-            samplerAnisotropy = .TRUE,
-        };
-        device_ci := Vk.DeviceCreateInfo.{
-            queueCreateInfoCount    = xx queue_create_infos.count,
-            pQueueCreateInfos       = queue_create_infos.data,
-            pEnabledFeatures        = *physical_device_features,
-            enabledExtensionCount   = context.vk.device.extensions.count,
-            ppEnabledExtensionNames = context.vk.device.extensions.data,
-
-            // @Note: Not necessary anymore, but for compatibility with older Vulkan implementations we set these anyway
-            enabledLayerCount       = context.vk.instance.layers.count,
-            ppEnabledLayerNames     = context.vk.instance.layers.data,
-        };
-
-        device, _ := Vk.create_device(context.vk.device.physical_device, *device_ci);
-        log_trace("Create device = %%");
-        context.vk.device.handle = device;
-    }
-
-    defer Vk.destroy_device(context.vk.device.handle);
-
-    log_debug("Loading device proc addresses...");
-    Vk.load_device_proc_addresses(context.vk.device.handle);
-
-    gfx_queue      := Vk.get_device_queue(context.vk.device.handle, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Graphics], 0);
-    transfer_queue := Vk.get_device_queue(context.vk.device.handle, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Transfer], 0);
-    present_queue  := Vk.get_device_queue(context.vk.device.handle, context.vk.device.queue_family_indices[Queue_Family_Index_Type.Present],  0);
+    device_make();
+    defer device_destroy();
 
     // -------------------------------------------------------
     // @Note: Get surface format from chosen physical device
@@ -705,17 +393,13 @@ main :: () {
                 }
             }
 
-            if member.type == cast(*Type_Info) Vector2 {
-                format = "R32G32_SFLOAT";
-            }
-            else if member.type == cast(*Type_Info) Vector3 {
-                format = "R32G32B32_SFLOAT";
-            }
-            else {
-                assert(false, "Unhandled type \"%\"!", member.type);
+            if member.type == {
+                case type_info(Vector2); format = "R32G32_SFLOAT";
+                case type_info(Vector3); format = "R32G32B32_SFLOAT";
+                case;                    assert(false, "Unhandled type \"%\"!", member.type);
             }
 
-            print_to_builder(*builder, ".{ binding = %, location = %, format = .%, offset = % },\n", binding, location, format, member.offset_in_bytes);
+            print_to_builder(*builder, "    .{ binding = %, location = %, format = .%, offset = % },\n", binding, location, format, member.offset_in_bytes);
         }
 
         append(*builder, "];\n");
@@ -820,7 +504,7 @@ main :: () {
 
     gfx_cmdpool_ci := Vk.CommandPoolCreateInfo.{
         flags            = .RESET_COMMAND_BUFFER,
-        queueFamilyIndex = context.vk.device.queue_family_indices[Queue_Family_Index_Type.Graphics],
+        queueFamilyIndex = get(context.vk.device.queues, .Graphics).family_index,
     };
     gfx_cmdpool, _ := Vk.create_command_pool(context.vk.device.handle, *gfx_cmdpool_ci);
     log_trace("Create graphics command pool = %%");
@@ -828,7 +512,7 @@ main :: () {
 
     transfer_cmdpool_ci := Vk.CommandPoolCreateInfo.{
         flags            = .RESET_COMMAND_BUFFER,
-        queueFamilyIndex = context.vk.device.queue_family_indices[Queue_Family_Index_Type.Transfer],
+        queueFamilyIndex = get(context.vk.device.queues, .Transfer).family_index,
     };
     transfer_cmdpool, _ := Vk.create_command_pool(context.vk.device.handle, *transfer_cmdpool_ci);
     log_trace("Create transfer command pool = %%");
@@ -962,9 +646,11 @@ main :: () {
             commandBufferCount = 1,
             pCommandBuffers    = *gfx_cmdbufs[0]
         };
-        _ := Vk.queue_one_submit(gfx_queue, submit_info);
+
+        gfx_queue := get(context.vk.device.queues, .Graphics);
+        _ := Vk.queue_one_submit(gfx_queue.handle, submit_info);
         log_trace("Graphics queue submit = %%");
-        _ := Vk.QueueWaitIdle(gfx_queue);
+        _ := Vk.QueueWaitIdle(gfx_queue.handle);
         log_trace("Graphics queue wait idle = %%");
     }
 
@@ -1034,9 +720,11 @@ main :: () {
             commandBufferCount = 1,
             pCommandBuffers    = *transfer_cmdbuf
         };
-        _ := Vk.queue_one_submit(transfer_queue, submit_info);
+
+        transfer_queue := get(context.vk.device.queues, .Transfer);
+        _ := Vk.queue_one_submit(transfer_queue.handle, submit_info);
         log_trace("Transfer queue submit = %%");
-        _ := Vk.QueueWaitIdle(transfer_queue);
+        _ := Vk.QueueWaitIdle(transfer_queue.handle);
         log_trace("Transfer queue wait idle = %%");
     }
     log_unindent();
@@ -1079,9 +767,11 @@ main :: () {
             commandBufferCount = 1,
             pCommandBuffers    = *transfer_cmdbuf
         };
-        _ := Vk.queue_one_submit(transfer_queue, submit_info);
+
+        transfer_queue := get(context.vk.device.queues, .Transfer);
+        _ := Vk.queue_one_submit(transfer_queue.handle, submit_info);
         log_trace("Transfer queue submit = %%");
-        _ := Vk.QueueWaitIdle(transfer_queue);
+        _ := Vk.QueueWaitIdle(transfer_queue.handle);
         log_trace("Transfer queue wait idle = %%");
     }
     log_unindent();
@@ -1376,7 +1066,9 @@ main :: () {
             signalSemaphoreCount = 1,
             pSignalSemaphores    = *render_finished_sem,
         };
-        _ := Vk.queue_one_submit(gfx_queue, submit_info, in_flight_fence);
+
+        gfx_queue := get(context.vk.device.queues, .Graphics);
+        _ := Vk.queue_one_submit(gfx_queue.handle, submit_info, in_flight_fence);
 
         // -------------------------------------------------------
         // @Note: Present swapchain using present queue
@@ -1389,7 +1081,8 @@ main :: () {
             pImageIndices      = *swapchain_image_idx,
         };
 
-        result := Vk.QueuePresentKHR(present_queue, *present_info);
+        present_queue := get(context.vk.device.queues, .Present);
+        result := Vk.queue_present(present_queue.handle, *present_info);
         if result == .ERROR_OUT_OF_DATE_KHR || result == .SUBOPTIMAL_KHR || should_resize {
             recreate_swapchain(window_width, window_height);
         }

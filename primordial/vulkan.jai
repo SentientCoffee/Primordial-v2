@@ -11,6 +11,7 @@
 
 Instance :: struct {
     handle: Vk.Instance;
+    debug_messenger: Vk.DebugUtilsMessengerEXT;
 
     #if OS == .WINDOWS {
         extensions :: *u8.[
@@ -32,17 +33,191 @@ Instance :: struct {
     ];
 }
 
+instance_make :: () {
+
+    // -------------------------------------------------------
+    // @Note: Check that we have all required extensions
+
+    available_instance_extensions, _ := Vk.enumerate_instance_extension_properties(null);
+    defer array_free(available_instance_extensions);
+
+    for req_ext : context.vk.instance.extensions {
+        req_ext_name := to_string(req_ext);
+
+        ext_found := false;
+        for available_ext : available_instance_extensions {
+            avail_ext_name := to_string(available_ext.extensionName.data);
+
+            if req_ext_name == avail_ext_name {
+                ext_found = true;
+                break;
+            }
+        }
+
+        assert(ext_found, "Required instance extension \"%\" not found!", req_ext_name);
+    }
+
+    builder := builder_make();
+
+    for available_ext : available_instance_extensions {
+        avail_ext_name := to_string(available_ext.extensionName.data);
+
+        is_req := false;
+        for req_ext : context.vk.instance.extensions {
+            req_ext_name := to_string(req_ext);
+            if req_ext_name == avail_ext_name {
+                is_req = true;
+                break;
+            }
+        }
+
+        if is_req then builder_print(*builder, "\x1b[32m%\x1b[0m", avail_ext_name);
+        else           builder_print(*builder, "%", avail_ext_name);
+
+        if it_index < available_instance_extensions.count-1 then builder_append(*builder, ", ");
+    }
+
+    log_trace("Instance extensions: %", builder_to_string(*builder));
+
+    // -------------------------------------------------------
+    // @Note: Check that we have all required layers (if any)
+
+    available_instance_layers, _ := Vk.enumerate_instance_layer_properties();
+    defer array_free(available_instance_layers);
+
+    for req_layer : context.vk.instance.layers {
+        req_layer_name := to_string(req_layer);
+
+        layer_found := false;
+        for available_layer : available_instance_layers {
+            avail_layer_name := to_string(available_layer.layerName.data);
+
+            if req_layer_name == avail_layer_name {
+                layer_found = true;
+                break;
+            }
+        }
+
+        assert(layer_found, "Required instance layer % not found!", req_layer_name);
+    }
+
+    for available_layer : available_instance_layers {
+        avail_layer_name := to_string(available_layer.layerName.data);
+
+        is_req := false;
+        for req_layer : context.vk.instance.layers {
+            req_layer_name := to_string(req_layer);
+            if req_layer_name == avail_layer_name {
+                is_req = true;
+                break;
+            }
+        }
+
+        if is_req then builder_print(*builder, "\x1b[32m%\x1b[0m", avail_layer_name);
+        else           builder_print(*builder, "%", avail_layer_name);
+
+        if it_index < available_instance_layers.count-1 then builder_append(*builder, ", ");
+    }
+
+    log_trace("Instance layers: %", builder_to_string(*builder));
+
+    // -------------------------------------------------------
+    // @Note: Create vulkan instance with debug messenger
+
+    debug_messenger_ci := Vk.DebugUtilsMessengerCreateInfoEXT.{
+        messageSeverity = .VERBOSE_EXT | .INFO_EXT | .WARNING_EXT | .ERROR_EXT,
+        messageType     = .GENERAL_EXT | .VALIDATION_EXT | .PERFORMANCE_EXT,
+        pfnUserCallback = vk_debug_callback,
+        pUserData       = *context,
+    };
+
+    app_info := Vk.ApplicationInfo.{
+        pApplicationName   = "Vulkan",
+        applicationVersion = Vk.MAKE_API_VERSION(0, 0, 0, 1),
+        pEngineName        = "No engine",
+        engineVersion      = Vk.MAKE_API_VERSION(0, 0, 0, 1),
+        apiVersion         = Vk.API_VERSION_1_3
+    };
+
+    instance_ci := Vk.InstanceCreateInfo.{
+        pApplicationInfo        = *app_info,
+        enabledExtensionCount   = context.vk.instance.extensions.count,
+        ppEnabledExtensionNames = context.vk.instance.extensions.data,
+        enabledLayerCount       = context.vk.instance.layers.count,
+        ppEnabledLayerNames     = context.vk.instance.layers.data,
+        pNext                   = *debug_messenger_ci,
+    };
+
+    instance, _ := Vk.create_instance(*instance_ci);
+    log_trace("Create instance = %%");
+    context.vk.instance.handle = instance;
+
+    log_debug("Loading instance proc addresses...");
+    Vk.load_instance_proc_addresses(context.vk.instance.handle);
+
+    context.vk.instance.debug_messenger, _ = Vk.create_debug_utils_messenger(context.vk.instance.handle, *debug_messenger_ci);
+    log_trace("Create debug utils messenger = %%");
+}
+
+instance_destroy :: () {
+    Vk.destroy_debug_utils_messenger(context.vk.instance.handle, context.vk.instance.debug_messenger);
+    Vk.destroy_instance(context.vk.instance.handle);
+}
+
+// -------------------------------------------------------
+
 Surface :: struct {
     handle: Vk.SurfaceKHR;
     format: Vk.SurfaceFormatKHR;
 }
 
+surface_make :: (window: $W) -> Surface
+#modify {
+    return W == type_of(Window.create_window(0, 0, ""));
+}{
+    surface: Surface;
+
+    #if OS == .WINDOWS {
+        Win32 :: #import "Windows";
+        hinstance  := Win32.GetModuleHandleW(null);  // @Todo: Add GetModuleHandleExW to Windows module
+        surface_ci := Vk.Win32SurfaceCreateInfoKHR.{
+            hinstance = hinstance,
+            hwnd      = window,
+        };
+
+        handle, _ := Vk.create_win32_surface(context.vk.instance.handle, *surface_ci);
+        log_trace("Create Win32 surface = %%");
+    }
+    else #if OS == .LINUX {
+        X11 :: #import "X11";
+        surface_ci := Vk.XlibSurfaceCreateInfoKHR.{
+            dpy    = X11.x_global_display,
+            window = window,
+        };
+
+        handle, _ := Vk.create_xlib_surface(context.vk.instance.handle, *surface_ci);
+        log_trace("Create Xlib surface = %%");
+    }
+
+    surface.handle = handle;
+    return surface;
+}
+
+surface_destroy :: inline () {
+    Vk.destroy_surface(context.vk.instance.handle, context.vk.surface.handle);
+}
+
 // -------------------------------------------------------
 
-Queue_Family_Index_Type :: enum {
+Queue_Family_Index :: enum u32 {
     Graphics;
     Transfer;
     Present;
+}
+
+Queue :: struct {
+    handle:         Vk.Queue;
+    family_index := #run max_of_type(u32);
 }
 
 Device :: struct {
@@ -57,12 +232,182 @@ Device :: struct {
     ];
 }
 
-get_physical_device_info :: () {
-    physical_device := context.vk.device.physical_device;
+device_make :: () {
 
-    context.vk.device.properties = Vk.get_physical_device_properties(physical_device);
-    device_props := context.vk.device.properties;
+    // -------------------------------------------------------
+    // @Note: Get the best physical device to create a logical device from
 
+    context.vk.device.physical_device = physical_device_get();
+    assert(context.vk.device.physical_device != null, "Suitable physical device not found!\n");
+    context.vk.device.properties = physical_device_get_properties(context.vk.device.physical_device);
+
+    // -------------------------------------------------------
+    // @Note: Get queue families to create
+
+    queue_families := Vk.get_physical_device_queue_family_properties(context.vk.device.physical_device);
+    defer array_free(queue_families);
+
+    for qf : queue_families {
+        set_index_if_unset_or :: (qfi: Queue_Family_Index, cond: bool) -> was_set: bool #expand {
+            if context.vk.device.queues[qfi].family_index != max_of_type(u32) then return false;
+            if !cond                                                          then return false;
+
+            context.vk.device.queues[qfi].family_index = `qf_index;
+            return true;
+        }
+
+        qf_index := cast(u32) it_index;
+
+        set_index_if_unset_or(.Present, Vk.get_physical_device_surface_support(context.vk.device.physical_device, qf_index, context.vk.surface.handle));
+        set_index_if_unset_or(.Graphics, (qf.queueFlags & .GRAPHICS) != 0);
+        set_index_if_unset_or(.Transfer, (qf.queueFlags & .TRANSFER) != 0);
+
+        all_indices_set := true;
+        for q : context.vk.device.queues {
+            if q.family_index != max_of_type(u32) then continue;
+
+            all_indices_set = false;
+            break;
+        }
+        if all_indices_set then break;
+    }
+
+    unique_queue_family_indices: [..]u32;
+    unique_queue_family_indices.allocator = temp;
+    defer array_free(unique_queue_family_indices);
+    for context.vk.device.queues {
+        array_add_if_unique(*unique_queue_family_indices, it.family_index);
+    }
+
+    queue_create_infos := NewArray(unique_queue_family_indices.count, Vk.DeviceQueueCreateInfo);
+    defer array_free(queue_create_infos);
+    for unique_queue_family_indices {
+        queue_priorities := float32.[1.0];
+        queue_create_infos[it_index] = Vk.DeviceQueueCreateInfo.{
+            queueCount       = 1,
+            queueFamilyIndex = it,
+            pQueuePriorities = queue_priorities.data,
+        };
+    }
+
+    // -------------------------------------------------------
+    // @Note: Create logical device
+
+    physical_device_features := Vk.PhysicalDeviceFeatures.{
+        samplerAnisotropy = .TRUE,
+    };
+
+    device_ci := Vk.DeviceCreateInfo.{
+        queueCreateInfoCount    = xx queue_create_infos.count,
+        pQueueCreateInfos       = queue_create_infos.data,
+        pEnabledFeatures        = *physical_device_features,
+        enabledExtensionCount   = context.vk.device.extensions.count,
+        ppEnabledExtensionNames = context.vk.device.extensions.data,
+
+        // @Note: Not necessary anymore, but for compatibility with older Vulkan implementations we set these anyway
+        enabledLayerCount       = context.vk.instance.layers.count,
+        ppEnabledLayerNames     = context.vk.instance.layers.data,
+    };
+
+    context.vk.device.handle, _ = Vk.create_device(context.vk.device.physical_device, *device_ci);
+    log_trace("Create device = %%");
+
+    log_debug("Loading device proc addresses...");
+    Vk.load_device_proc_addresses(context.vk.device.handle);
+
+
+    for * context.vk.device.queues {
+        it.handle = Vk.get_device_queue(context.vk.device.handle, it.family_index, 0);
+    }
+    // gfx_queue      := Vk.get_device_queue(context.vk.device.handle, get(context.vk.device.queues, .Graphics).family_index, 0);
+    // transfer_queue := Vk.get_device_queue(context.vk.device.handle, get(context.vk.device.queues, .Transfer).family_index, 0);
+    // present_queue  := Vk.get_device_queue(context.vk.device.handle, get(context.vk.device.queues, .Present).family_index,  0);
+}
+
+device_destroy :: () {
+    Vk.destroy_device(context.vk.device.handle);
+}
+
+physical_device_get :: () -> Vk.PhysicalDevice {
+
+    // -------------------------------------------------------
+    // @Note: For now just pick the first GPU we find that has all the things we need.
+    //        Later we can pick the best one, or make a UI system to pick the GPU.
+
+    available_physical_devices, _ := Vk.enumerate_physical_devices(context.vk.instance.handle);
+    assert(available_physical_devices.count > 0, "Physical device with Vulkan support not found!");
+    defer array_free(available_physical_devices);
+
+    for pd : available_physical_devices {
+        props := Vk.get_physical_device_properties(pd);
+
+        available_device_extensions, _ := Vk.enumerate_device_extension_properties(pd, null);
+        defer array_free(available_device_extensions);
+
+        for req_ext : context.vk.device.extensions {
+            req_ext_name := to_string(req_ext);
+
+            ext_found := false;
+            for available_ext : available_device_extensions {
+                avail_ext_name := to_string(available_ext.extensionName.data);
+                if req_ext_name == avail_ext_name {
+                    ext_found = true;
+                    break;
+                }
+            }
+
+            if !ext_found then continue pd;
+        }
+
+        queue_families := Vk.get_physical_device_queue_family_properties(pd);
+        defer array_free(queue_families);
+
+        has_graphics_support := false;
+        has_transfer_support := false;
+        has_present_support  := false;
+
+        for qf, qf_index : queue_families {
+            if !has_graphics_support {
+                has_graphics_support = (qf.queueFlags & .GRAPHICS) != 0;
+            }
+            if !has_transfer_support {
+                has_transfer_support = (qf.queueFlags & .TRANSFER) != 0;
+            }
+            if !has_present_support {
+                has_present_support, _ = Vk.get_physical_device_surface_support(pd, cast(u32) qf_index, context.vk.surface.handle);
+            }
+        }
+
+        surface_formats, _ := Vk.get_physical_device_surface_formats(pd, context.vk.surface.handle);
+        defer array_free(surface_formats);
+
+        present_modes, _ := Vk.get_physical_device_surface_present_modes(pd, context.vk.surface.handle);
+        defer array_free(present_modes);
+
+        features := Vk.get_physical_device_features(pd);
+
+        log_trace(
+            "% (0x%): Graphics = % | Transfer = % | Present = % | Surface formats = % | Present modes = % | Anisotropy = %",
+            to_string(props.deviceName.data), FormatInt.{value = props.deviceID, base = 16},
+            has_graphics_support, has_transfer_support, has_present_support, surface_formats.count, present_modes.count, features.samplerAnisotropy
+        );
+
+
+        if !has_graphics_support || !has_transfer_support || !has_present_support then continue pd;
+        if surface_formats.count <= 0                                             then continue pd;
+        if present_modes.count   <= 0                                             then continue pd;
+        if features.samplerAnisotropy == .FALSE                                   then continue pd;
+
+        return pd;
+    }
+
+    return null;
+}
+
+physical_device_get_properties :: (physical_device: Vk.PhysicalDevice) -> Vk.PhysicalDeviceProperties {
+    device_props := Vk.get_physical_device_properties(physical_device);
+
+    // @Note: Debug info logging
     device_extensions, _ := Vk.enumerate_device_extension_properties(physical_device, null);
     defer array_free(device_extensions);
 
@@ -91,6 +436,8 @@ get_physical_device_info :: () {
     }
 
     log_trace("Device extensions: %", builder_to_string(*builder));
+
+    return device_props;
 }
 
 // -------------------------------------------------------
@@ -390,8 +737,8 @@ swapchain_make :: (width: int, height: int) {
         ifx surface_capabilities.maxImageCount > 0 else max_of_type(u32)
     );
 
-    gfx_family_index     := device.queue_family_indices[Queue_Family_Index_Type.Graphics];
-    present_family_index := device.queue_family_indices[Queue_Family_Index_Type.Present];
+    gfx_family_index     := get(device.queues, .Graphics).family_index;
+    present_family_index := get(device.queues, .Present).family_index;
     queue_family_indices := u32.[gfx_family_index, present_family_index];
     shared_queue         := (gfx_family_index == present_family_index);
 
